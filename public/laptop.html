@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Zeta Kuis - Layar Laptop</title>
+  <link rel="icon" href="/favicon.ico">
+  <link rel="stylesheet" href="/css/base.css">
+  <link rel="stylesheet" href="/css/laptop.css">
+</head>
+<body>
+  <header id="brand">
+    <img id="brand-logo" src="/logo.ico" alt="" onerror="this.style.display='none'">
+    <span id="brand-nama">ZETA KUIS</span>
+    <span id="brand-babak"></span>
+  </header>
+  <div id="koneksi"><span id="titik-koneksi" class="indikator"></span></div>
+  <div id="flash"></div>
+
+  <div id="overlay-suara">KLIK DI MANA SAJA UNTUK MENGAKTIFKAN SUARA</div>
+
+  <main class="layar">
+    <section id="tampilan-idle" class="tampilan aktif">
+      <div class="judul">CARA BERMAIN</div>
+      <div id="kartu-aturan"></div>
+    </section>
+
+    <section id="tampilan-soal" class="tampilan">
+      <div id="nomor-soal"></div>
+      <div id="lencana-babak"></div>
+      <div id="teks-soal"></div>
+      <div id="giliran"></div>
+      <div class="papan-skor">
+        <span class="tim" id="skor-nama-a"></span>
+        <span class="angka" id="skor-angka-a"></span>
+        <span>—</span>
+        <span class="angka" id="skor-angka-b"></span>
+        <span class="tim" id="skor-nama-b"></span>
+      </div>
+    </section>
+
+    <section id="tampilan-input" class="tampilan">
+      <div id="lencana-babak-input"></div>
+      <div id="banner-lempar">KESEMPATAN TIM LAWAN</div>
+      <div id="label-penjawab"></div>
+      <div id="soal-kecil-lempar"></div>
+      <input id="kotak-jawaban" type="text" autocomplete="off" spellcheck="false" autocapitalize="off" maxlength="100">
+      <div id="pembungkus-timer">
+        <div id="lintasan-bar"><div id="isi-bar"></div></div>
+        <div id="angka-detik"></div>
+      </div>
+    </section>
+
+    <section id="tampilan-loading" class="tampilan">
+      <div class="pulse">Memeriksa Jawaban...</div>
+    </section>
+
+    <section id="tampilan-hasil" class="tampilan">
+      <div id="teks-hasil"></div>
+      <div id="detail-hasil"></div>
+      <div class="papan-skor">
+        <span class="tim" id="hasil-nama-a"></span>
+        <span class="angka" id="hasil-angka-a"></span>
+        <span>—</span>
+        <span class="angka" id="hasil-angka-b"></span>
+        <span class="tim" id="hasil-nama-b"></span>
+      </div>
+    </section>
+
+    <section id="tampilan-pemenang" class="tampilan">
+      <div id="pemenang-kicker">PEMENANGNYA ADALAH...</div>
+      <div id="nama-pemenang"></div>
+      <div id="skor-akhir"></div>
+    </section>
+  </main>
+
+  <script src="/lib/confetti/confetti.browser.js"></script>
+  <script src="/js/audio-manager.js"></script>
+  <script src="/js/laptop.js"></script>
+</body>
+</html>

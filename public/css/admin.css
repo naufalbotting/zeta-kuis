@@ -1,0 +1,127 @@
+/* Zeta Kuis - Panel admin HP, mobile-first, monokrom. */
+body {
+  min-height: 100vh;
+  padding-bottom: 110px;
+}
+
+header.atas {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--bg-3);
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+header.atas .info { font-size: 0.95rem; color: var(--abu-terang); }
+#status-koneksi { font-size: 0.85rem; color: var(--abu); }
+
+main { padding: 16px; max-width: 640px; margin: 0 auto; }
+
+.kartu {
+  background: var(--bg-2);
+  border: 1px solid var(--bg-3);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+label.judul-kecil { display: block; margin: 12px 0 6px; color: var(--abu-terang); }
+
+input[type="text"], textarea {
+  width: 100%;
+  background: #000;
+  border: 1px solid var(--abu-gelap);
+  color: var(--putih);
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 1.05rem;
+  font-family: var(--font-isi);
+}
+textarea { min-height: 80px; resize: vertical; white-space: pre-line; }
+
+button {
+  font-family: var(--font-isi);
+  font-weight: 700;
+  border: none;
+  border-radius: 10px;
+  min-height: 64px;
+  font-size: 1.1rem;
+  padding: 12px 16px;
+  margin-top: 12px;
+  width: 100%;
+  cursor: pointer;
+  background: var(--abu-gelap);
+  color: var(--putih);
+}
+button:disabled { opacity: 0.45; cursor: not-allowed; }
+button.primer { background: var(--putih); color: #000; }
+button.benar { background: var(--hijau); color: #000; }
+button.salah { background: var(--merah); color: var(--putih); }
+button.bahaya { background: var(--merah); color: var(--putih); }
+button.kecil { min-height: 48px; font-size: 0.95rem; width: auto; }
+
+.baris-tombol { display: flex; gap: 12px; }
+.baris-tombol button { flex: 1; }
+
+#panel-kontrol {
+  position: sticky;
+  bottom: 0;
+  background: var(--bg-2);
+  border-top: 1px solid var(--bg-3);
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  display: flex;
+  gap: 12px;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+#panel-kontrol.sembunyi { display: none; }
+
+#kotak-live, #kotak-final {
+  background: #000;
+  border: 1px solid var(--abu-gelap);
+  border-radius: 8px;
+  padding: 14px;
+  font-size: 1.3rem;
+  min-height: 64px;
+  white-space: pre-line;
+}
+
+#toast {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  background: var(--merah);
+  color: var(--putih);
+  padding: 12px;
+  border-radius: 8px;
+  text-align: center;
+  display: none;
+  z-index: 40;
+}
+#toast.tampil { display: block; }
+
+#modal-akhir {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 30;
+  padding: 20px;
+}
+#modal-akhir.tampil { display: flex; }
+#modal-akhir .kartu { width: 100%; max-width: 420px; }
+
+.bantuan { color: var(--abu); font-size: 0.9rem; }
+.hasil-benar { color: var(--hijau); font-weight: 700; }
+.hasil-salah { color: var(--merah); font-weight: 700; }
+section.mode { display: none; }
+section.mode.aktif { display: block; }

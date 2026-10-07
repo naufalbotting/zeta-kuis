@@ -1,0 +1,112 @@
+/* Zeta Kuis - Token warna, font lokal, reset. Dipakai kedua halaman. */
+@font-face {
+  font-family: 'Bebas Neue';
+  src: url('/fonts/bebas-neue-regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Inter';
+  src: url('/fonts/inter-regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Inter';
+  src: url('/fonts/inter-bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --bg: #121212;          /* latar utama */
+  --bg-2: #1a1a1a;        /* kartu / input */
+  --bg-3: #2a2a2a;        /* garis / track */
+  --putih: #ffffff;
+  --abu-terang: #cfcfcf;
+  --abu: #888888;
+  --abu-gelap: #444444;
+  --hijau: #22c55e;       /* HANYA untuk BENAR */
+  --merah: #ef4444;       /* HANYA untuk SALAH & tombol Akhiri */
+  --font-judul: 'Bebas Neue', Impact, 'Arial Narrow Bold', sans-serif;
+  --font-isi: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--putih);
+  font-family: var(--font-isi);
+}
+
+.indikator {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--merah);
+}
+.indikator.hidup { background: var(--hijau); }
+
+/* Brand Zeta Kuis: tampil di semua layar dan mode. */
+#brand {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 55;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 8px 48px 8px 12px;
+  background: rgba(0, 0, 0, 0.65);
+  border-bottom: 1px solid var(--bg-3);
+  font-family: var(--font-judul);
+  letter-spacing: 0.12em;
+  font-size: 1.2rem;
+}
+#brand-logo {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
+#brand-babak {
+  font-family: var(--font-isi);
+  font-size: 0.8rem;
+  color: var(--abu-terang);
+  border: 1px solid var(--abu-gelap);
+  border-radius: 999px;
+  padding: 2px 10px;
+  letter-spacing: 0.06em;
+}
+#brand-babak:empty { display: none; }
+
+.brand-kiri {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+#brand-logo-admin {
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+}
+.opsi-mode { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 8px; }
+.opsi-mode label { color: var(--abu-terang); }
+select, input[type="number"] {
+  width: 100%;
+  background: #000;
+  border: 1px solid var(--abu-gelap);
+  color: var(--putih);
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 1.05rem;
+  font-family: var(--font-isi);
+}

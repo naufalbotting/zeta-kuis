@@ -1,0 +1,232 @@
+/* Zeta Kuis - Layar laptop: fullscreen, monokrom, tanpa scroll. */
+html, body {
+  height: 100%;
+  overflow: hidden;
+}
+
+body.game-jalan { cursor: none; }
+
+#koneksi {
+  position: fixed;
+  top: 12px;
+  right: 14px;
+  z-index: 60;
+}
+
+.layar {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 64px 4vw 3vh;
+  text-align: center;
+}
+
+section.tampilan { display: none; width: 100%; }
+section.tampilan.aktif { display: block; }
+
+/* Idle: cara bermain yang gampang dibaca */
+#tampilan-idle .judul {
+  font-family: var(--font-judul);
+  font-size: clamp(2.5rem, 6vw, 5rem);
+  letter-spacing: 0.06em;
+}
+#kartu-aturan {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  flex-wrap: wrap;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+.kartu-aturan {
+  flex: 1 1 280px;
+  max-width: 340px;
+  background: var(--bg-2);
+  border: 1px solid var(--bg-3);
+  border-radius: 14px;
+  padding: 16px 18px;
+  text-align: left;
+}
+.kartu-aturan h3 {
+  margin: 0 0 8px;
+  font-family: var(--font-judul);
+  letter-spacing: 0.08em;
+  font-size: 1.6rem;
+}
+.kartu-aturan ol {
+  margin: 0;
+  padding-left: 22px;
+  color: var(--abu-terang);
+  font-size: 1.15rem;
+  line-height: 1.65;
+}
+#lencana-babak, #lencana-babak-input {
+  display: inline-block;
+  border: 1px solid var(--abu-gelap);
+  border-radius: 999px;
+  padding: 4px 16px;
+  color: var(--abu-terang);
+  letter-spacing: 0.1em;
+  margin-bottom: 1vh;
+}
+#lencana-babak:empty, #lencana-babak-input:empty { display: none; }
+
+/* Question */
+#nomor-soal {
+  position: absolute;
+  top: 16px;
+  left: 20px;
+  color: var(--abu);
+  font-size: 1.3rem;
+  letter-spacing: 0.1em;
+}
+#teks-soal {
+  font-family: var(--font-judul);
+  font-size: clamp(3rem, 7vw, 9rem);
+  line-height: 1.05;
+  white-space: pre-line;
+  max-width: 90vw;
+  margin: 0 auto;
+}
+#teks-soal.panjang {
+  font-size: clamp(2rem, 4.5vw, 5.5rem);
+}
+#giliran {
+  margin-top: 2vh;
+  color: var(--abu-terang);
+  font-size: clamp(1.2rem, 2.6vw, 2rem);
+  letter-spacing: 0.08em;
+}
+
+/* Papan skor */
+.papan-skor {
+  margin-top: 3vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 2vw;
+  font-size: clamp(1.2rem, 2.4vw, 2rem);
+}
+.papan-skor .tim { color: var(--abu); }
+.papan-skor .tim.giliran { color: var(--putih); text-decoration: underline; }
+.papan-skor .angka { font-weight: 700; }
+#tampilan-hasil .papan-skor { font-size: clamp(1.6rem, 3.4vw, 2.8rem); }
+
+/* Input */
+#label-penjawab { font-size: clamp(1.3rem, 2.6vw, 2.2rem); color: var(--abu-terang); }
+#banner-lempar {
+  display: none;
+  font-family: var(--font-judul);
+  font-size: clamp(1.8rem, 4vw, 3.4rem);
+  letter-spacing: 0.08em;
+}
+#banner-lempar.tampil { display: block; }
+#soal-kecil-lempar {
+  display: none;
+  color: var(--abu-terang);
+  font-size: 1.6rem;
+  white-space: pre-line;
+  max-width: 80vw;
+  margin: 1vh auto;
+}
+#soal-kecil-lempar.tampil { display: block; }
+#kotak-jawaban {
+  width: 80vw;
+  height: 120px;
+  margin-top: 2vh;
+  background: var(--bg-2);
+  border: 3px solid var(--putih);
+  color: var(--putih);
+  font-size: 4rem;
+  text-align: center;
+  outline: none;
+}
+#pembungkus-timer { margin-top: 3vh; }
+#lintasan-bar {
+  width: 70vw;
+  height: 24px;
+  background: #000;
+  border: 1px solid var(--abu-gelap);
+  margin: 0 auto;
+}
+#isi-bar {
+  height: 100%;
+  width: 100%;
+  background: var(--abu);
+}
+#angka-detik { font-size: 6rem; font-weight: 700; }
+#angka-detik.mendesak { color: var(--putih); animation: denyut 1s infinite; }
+@keyframes denyut {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.12); opacity: 0.85; }
+}
+
+/* Loading */
+#tampilan-loading .pulse {
+  font-family: var(--font-judul);
+  font-size: clamp(2.4rem, 5vw, 4.4rem);
+  animation: pulse 1.2s infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 0.3; transform: scale(0.97); }
+  50% { opacity: 1; transform: scale(1.03); }
+}
+
+/* Result */
+#teks-hasil { font-family: var(--font-judul); font-size: clamp(3rem, 8vw, 7rem); }
+#teks-hasil.benar { color: var(--hijau); }
+#teks-hasil.salah { color: var(--merah); }
+#detail-hasil { font-size: clamp(1.2rem, 2.6vw, 2rem); color: var(--abu-terang); }
+
+/* Flash */
+#flash {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 50;
+}
+
+/* Overlay suara */
+#overlay-suara {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.85);
+  z-index: 70;
+  font-size: clamp(1.4rem, 3vw, 2.4rem);
+  text-align: center;
+  padding: 24px;
+}
+#overlay-suara.sembunyi { display: none; }
+
+/* Winner */
+#tampilan-pemenang { background: #000; }
+#pemenang-kicker {
+  font-family: var(--font-judul);
+  font-size: clamp(2rem, 5vw, 4rem);
+  opacity: 0;
+  transition: opacity 1.5s ease;
+}
+#pemenang-kicker.muncul { opacity: 1; }
+#nama-pemenang {
+  font-family: var(--font-judul);
+  font-size: clamp(3rem, 9vw, 8rem);
+  min-height: 1.2em;
+}
+#nama-pemenang.slot-in { animation: slotmasuk 80ms ease-out; }
+@keyframes slotmasuk {
+  from { transform: translateY(-40%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+#nama-pemenang.menang {
+  transform: scale(1.6);
+  transition: transform 1.2s cubic-bezier(.2,.8,.2,1);
+  color: #ffd700;
+}
+#skor-akhir { color: var(--abu-terang); font-size: 1.4rem; }
