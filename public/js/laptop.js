@@ -1,7 +1,14 @@
 // Zeta Kuis - Logika layar laptop (mode Vercel: REST + polling, tanpa Socket.IO).
 // Live-typing antar layar dibuang sesuai keputusan: jawaban terkirim saat ENTER.
 // Client hanya merender dan memanggil /api/aksi; state resmi di server (Redis).
-const INTERVAL_POLL_MS = 1000;
+// Poll adaptif: cepat saat permainan aktif (agar animasi tak terlewat),
+// lambat saat idle (hemat kuota + hemat limit Redis).
+const POLL_CEPAT_MS = 400;
+const POLL_LAMBAT_MS = 1500;
+
+function faseAktif() {
+  return fase === 'MENJAWAB' || fase === 'MENILAI' || fase === 'MELEMPAR';
+}
 
 let fase = 'IDLE';
 let tahap = 'UTAMA';
@@ -349,19 +356,19 @@ function terapkanSnapshot(s) {
       sudahKirim = false;
       hentikanTimer();
       inputEl.value = '';
-      AudioManager.play('start');
       renderSoal();
       tampilkan('tampilan-soal');
     } else {
       renderSoal();
     }
     rebutanTerakhir = String(s.rebutanDipilih);
+    prosesPeristiwa(s);
     return;
   }
 
   if (s.fase === 'MENJAWAB') {
     // Saya yang sedang mengetik: jangan ganggu timer & ketikan lokal.
-    if (lama === 'MENJAWAB' && !sudahKirim) return;
+    if (lama === 'MENJAWAB' && !sudahKirim) { prosesPeristiwa(s); return; }
     sudahKirim = false;
     inputEl.value = '';
     if (tahap === 'LEMPAR') {
@@ -379,57 +386,46 @@ function terapkanSnapshot(s) {
     $('lencana-babak-input').textContent = labelBabak();
     tampilkan('tampilan-input');
     try { inputEl.focus(); } catch (e) {}
-    AudioManager.play('tick');
     const total = tahap === 'LEMPAR' ? config.DETIK_LEMPAR : config.DETIK_MENJAWAB;
     const sisa = typeof s.sisaDetik === 'number' ? s.sisaDetik : total;
     mulaiTimerLokalDariSisa(sisa, total);
+    prosesPeristiwa(s);
     return;
   }
 
   if (s.fase === 'MENILAI') {
-    if (lama === 'MENILAI') return; // idempoten
     sudahKirim = true;
     hentikanTimer();
-    AudioManager.stopAll();
     tampilkan('tampilan-loading');
-    AudioManager.play('drumroll');
+    prosesPeristiwa(s);
     return;
   }
 
   if (s.fase === 'MELEMPAR') {
-    if (lama === 'MELEMPAR') return;
     sudahKirim = true;
     hentikanTimer();
-    AudioManager.stopAll();
-    AudioManager.play('wrong');
-    kedip('#ef4444');
     tampilkan('tampilan-loading');
+    prosesPeristiwa(s);
     return;
   }
 
   if (s.fase === 'HASIL') {
-    if (lama === 'HASIL') return;
     sudahKirim = true;
     hentikanTimer();
-    AudioManager.stopAll();
     if (s.hasilTerakhir === 'BENAR') {
-      AudioManager.play('correct');
-      kedip('#22c55e');
       tampilHasilBenar(s.giliranTim === 'A' ? timA : timB, s.poinTerakhir);
     } else {
-      AudioManager.play('wrong');
-      kedip('#ef4444');
       tampilHasilSalah();
     }
+    prosesPeristiwa(s);
     return;
   }
 
   if (s.fase === 'PEMENANG') {
     sudahKirim = true;
-    if (lama !== 'PEMENANG') {
-      jalankanWinner(s.pemenang, timA, timB, skorA, skorB);
-    } else {
-      // Poll berikutnya: tampilkan statis tanpa mengulang animasi & suara.
+    const animasiJalan = prosesPeristiwa(s);
+    if (!animasiJalan) {
+      // Tanpa event SELESAI baru: tampilkan statis tanpa mengulang animasi & suara.
       tampilkan('tampilan-pemenang');
       $('pemenang-kicker').classList.add('muncul');
       const namaEl = $('nama-pemenang');
@@ -440,6 +436,59 @@ function terapkanSnapshot(s) {
       $('skor-akhir').textContent = timA + ' ' + skorA + ' — ' + skorB + ' ' + timB;
     }
   }
+}
+
+// Antrean kejadian dari server: tiap rev baru dimainkan sekali, tak peduli
+// poll sedang cepat atau lambat. Sinkronisasi awal tidak membunyikan masa lalu.
+let revTerakhir = -1;
+
+function prosesPeristiwa(s) {
+  const rev = typeof s.rev === 'number' ? s.rev : 0;
+  const daftar = Array.isArray(s.antrean) ? s.antrean.slice().sort((a, b) => a.rev - b.rev) : [];
+  if (revTerakhir === -1) { revTerakhir = rev; return false; }
+  if (rev < revTerakhir) { revTerakhir = rev; return false; } // epoch baru (reset)
+  let selesai = false;
+  for (const ev of daftar) {
+    if (!ev || typeof ev.rev !== 'number' || ev.rev <= revTerakhir) continue;
+    revTerakhir = ev.rev;
+    if (mainkanPeristiwa(ev)) selesai = true;
+  }
+  return selesai;
+}
+
+function mainkanPeristiwa(ev) {
+  switch (ev.jenis) {
+    case 'SOAL_BARU':
+      AudioManager.play('start');
+      break;
+    case 'MULAI_MENJAWAB':
+    case 'MULAI_LEMPAR':
+      AudioManager.play('tick');
+      break;
+    case 'JAWAB_TERKIRIM':
+      AudioManager.stopAll();
+      tampilkan('tampilan-loading');
+      AudioManager.play('drumroll');
+      break;
+    case 'BENAR':
+      AudioManager.stopAll();
+      AudioManager.play('correct');
+      kedip('#22c55e');
+      break;
+    case 'SALAH_LEMPAR':
+    case 'SALAH_HASIL':
+      AudioManager.stopAll();
+      AudioManager.play('wrong');
+      kedip('#ef4444');
+      break;
+    case 'SELESAI':
+      if (fase === 'PEMENANG') {
+        jalankanWinner(ev.pemenang, timA, timB, skorA, skorB);
+        return true;
+      }
+      break;
+  }
+  return false;
 }
 
 let pollJalan = false;
@@ -508,4 +557,9 @@ renderPeraturan();
 perbaruiBrand();
 tampilkan('tampilan-idle');
 pollSekali();
-setInterval(pollSekali, INTERVAL_POLL_MS);
+(function jadwalPoll() {
+  setTimeout(async () => {
+    await pollSekali();
+    jadwalPoll();
+  }, faseAktif() ? POLL_CEPAT_MS : POLL_LAMBAT_MS);
+})();

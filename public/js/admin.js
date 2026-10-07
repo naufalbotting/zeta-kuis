@@ -1,7 +1,13 @@
 // Zeta Kuis - Panel admin HP (mode Vercel: REST + polling, tanpa Socket.IO).
 // Live-typing antar layar dibuang sesuai keputusan: juri menilai jawaban final
 // yang dikirim peserta saat ENTER. Juri mengisi tim & soal, menilai, lanjut soal.
-const INTERVAL_POLL_MS = 1000;
+// Poll adaptif: cepat saat permainan aktif, lambat saat idle/selesai.
+const POLL_CEPAT_MS = 400;
+const POLL_LAMBAT_MS = 1500;
+
+function faseAktif() {
+  return fase === 'MENJAWAB' || fase === 'MENILAI' || fase === 'MELEMPAR';
+}
 
 let fase = 'IDLE';
 let tahap = 'UTAMA';
@@ -458,4 +464,9 @@ perbaruiPengaturanKedua();
 perbaruiHeader();
 perbaruiTombolNext();
 pollSekali();
-setInterval(pollSekali, INTERVAL_POLL_MS);
+(function jadwalPoll() {
+  setTimeout(async () => {
+    await pollSekali();
+    jadwalPoll();
+  }, faseAktif() ? POLL_CEPAT_MS : POLL_LAMBAT_MS);
+})();

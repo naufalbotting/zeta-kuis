@@ -36,6 +36,7 @@ async function state() {
 
   h = await aksi({ aksi: 'setup', timA: 'Garuda', timB: 'Elang', soal: ['S1', 'S2', 'S3'], mode: 'KEDUA', urutan: 'POIN_DULU', jumlahBabakPertama: 2 });
   cek('setup KEDUA -> SOAL', h.badan.ok && h.badan.snap.fase === 'SOAL' && h.badan.snap.giliranTim === 'A', h.badan);
+  cek('setup catat SOAL_BARU', h.badan.snap.rev >= 1 && h.badan.snap.antrean.some((e) => e.jenis === 'SOAL_BARU'), h.badan.snap);
 
   h = await aksi({ aksi: 'mulai' });
   cek('mulai -> MENJAWAB', h.badan.snap.fase === 'MENJAWAB' && typeof h.badan.snap.sisaDetik === 'number', h.badan.snap);
@@ -45,6 +46,7 @@ async function state() {
 
   h = await aksi({ aksi: 'nilai', hasil: 'BENAR' });
   cek('benar utama +10', h.badan.snap.fase === 'HASIL' && h.badan.snap.skorA === 10, h.badan.snap);
+  cek('benar catat BENAR', h.badan.snap.antrean.some((e) => e.jenis === 'BENAR' && e.poin === 10), h.badan.snap.antrean);
 
   h = await aksi({ aksi: 'next' });
   cek('next soal 2 giliran B', h.badan.snap.fase === 'SOAL' && h.badan.snap.nomorSoal === 2 && h.badan.snap.giliranTim === 'B', h.badan.snap);
@@ -55,6 +57,7 @@ async function state() {
   h = await aksi({ aksi: 'nilai', hasil: 'SALAH' });
   const jeda = Date.now() - t0;
   cek('salah utama -> LEMPAR (jeda Server ~1,5 dtk)', h.badan.snap.fase === 'MENJAWAB' && h.badan.snap.tahap === 'LEMPAR' && h.badan.snap.giliranTim === 'A' && jeda >= 1400, { snap: h.badan.snap, jedaMs: jeda });
+  cek('lempar catat SALAH_LEMPAR + MULAI_LEMPAR', h.badan.snap.antrean.some((e) => e.jenis === 'SALAH_LEMPAR') && h.badan.snap.antrean.some((e) => e.jenis === 'MULAI_LEMPAR'), h.badan.snap.antrean);
 
   await aksi({ aksi: 'jawab', text: 'Benar lemparan' });
   h = await aksi({ aksi: 'nilai', hasil: 'BENAR' });
