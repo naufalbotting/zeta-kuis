@@ -26,10 +26,11 @@ function buatRes(native) {
   return {
     statusCode: 200,
     _kepala: {},
+    setHeader(nama, nilai) { this._kepala[nama] = nilai; },
     status(kode) { this.statusCode = kode; return this; },
     json(objek) {
       const badan = JSON.stringify(objek);
-      native.writeHead(this.statusCode, { 'Content-Type': 'application/json; charset=utf-8' });
+      native.writeHead(this.statusCode, Object.assign({ 'Content-Type': 'application/json; charset=utf-8' }, this._kepala));
       native.end(badan);
     },
   };

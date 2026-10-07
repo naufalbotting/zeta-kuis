@@ -2,10 +2,18 @@
 // Body: { aksi, ...data } dengan aksi salah satu dari:
 // setup | mulai | jawab | nilai | lempar | next | rebutan | akhiri | reset
 const { aksi } = require('../lib/kuis');
+const { PESAN_REDIS } = require('../lib/kv');
 
 const DAFTAR = ['setup', 'mulai', 'jawab', 'nilai', 'lempar', 'next', 'rebutan', 'akhiri', 'reset'];
 
+function kepalaAntiCache(res) {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.setHeader('CDN-Cache-Control', 'no-store');
+  res.setHeader('Vercel-CDN-Cache-Control', 'no-store');
+}
+
 module.exports = async (req, res) => {
+  kepalaAntiCache(res);
   if (req.method !== 'POST') {
     res.status(405).json({ ok: false, pesan: 'Metode tidak didukung.' });
     return;
@@ -23,6 +31,10 @@ module.exports = async (req, res) => {
     }
     res.status(200).json({ ok: true, snap: hasil.snap });
   } catch (e) {
+    if (e && e.kode === 'NO_REDIS') {
+      res.status(500).json({ ok: false, pesan: PESAN_REDIS });
+      return;
+    }
     res.status(500).json({ ok: false, pesan: 'Gagal memproses aksi. Periksa env Redis.' });
   }
 };
