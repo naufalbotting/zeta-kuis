@@ -1,11 +1,13 @@
 # AI.md — Sistem Cerdas Cermat Real-Time (Mode Lokal)
 
-> **CATATAN 2026-10-07: arsitektur produksi PINDAH ke Vercel.**
-> Spesifikasi Socket.IO di bawah ini adalah desain awal (mode lokal) dan
-> sudah digantikan: `api/state.js` + `api/aksi.js` (REST + polling 1 detik),
-> state di Upstash Redis (`lib/kuis.js`, `lib/kv.js`), live-typing dibuang
-> (jawaban terkirim saat ENTER). Lihat `DEPLOY.md`. Aturan permainan,
-> poin, dan babak tetap sama.
+> **CATATAN 2026-10-07 (diperbarui): kini versi MCQ.**
+> Mode ketik + Socket.IO + babak/lemparan/juri-menilai SUDAH DIHAPUS.
+> Sekarang: POIN saja, pilihan ganda A-D tanpa batas soal, koreksi otomatis
+> via kunci, hint 1x/soal (admin pilih opsi salah, benar setelah hint +5),
+> animasi tegang 3 detik otomatis. Backend `api/state.js` + `api/aksi.js`
+> (REST + polling), state di Upstash Redis (`lib/kuis.js`, `lib/kv.js`).
+> Lihat `DEPLOY.md` (deploy) dan `DESAIN.md` (panduan desain).
+> Spesifikasi lama di bawah ini ARSIP dan tidak lagi berlaku.
 
 > **Dokumen ini adalah spesifikasi final untuk AI Vibecoding.**
 > Semua keputusan desain sudah diambil di sini. **Jangan bertanya balik.** Jika ada hal yang terasa belum dijelaskan, gunakan nilai default di dokumen ini, lalu lanjut membangun.

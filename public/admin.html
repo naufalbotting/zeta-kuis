@@ -16,7 +16,6 @@
       <span id="titik-koneksi" class="indikator"></span>
       <span id="status-koneksi">Menghubungkan...</span>
     </div>
-    <div class="info" id="info-babak"></div>
     <div class="info" id="info-soal"></div>
     <div class="info" id="info-skor"></div>
   </header>
@@ -31,22 +30,7 @@
         <input id="input-tim-a" type="text" maxlength="20" autocomplete="off">
         <label class="judul-kecil" for="input-tim-b">Nama Tim 2</label>
         <input id="input-tim-b" type="text" maxlength="20" autocomplete="off">
-        <label class="judul-kecil">Mode permainan</label>
-        <div class="opsi-mode">
-          <label><input type="radio" name="mode" value="POIN" checked> Poin saja</label>
-          <label><input type="radio" name="mode" value="REBUTAN"> Rebutan saja</label>
-          <label><input type="radio" name="mode" value="KEDUA"> Keduanya</label>
-        </div>
-        <div id="pengaturan-kedua" style="display:none">
-          <label class="judul-kecil" for="pilih-urutan">Urutan babak</label>
-          <select id="pilih-urutan">
-            <option value="POIN_DULU" selected>Poin dulu, lalu Rebutan</option>
-            <option value="REBUTAN_DULU">Rebutan dulu, lalu Poin</option>
-          </select>
-          <label class="judul-kecil" for="input-jumlah-pertama">Jumlah soal babak pertama</label>
-          <input id="input-jumlah-pertama" type="number" min="1" max="9" value="5">
-          <p class="bantuan" id="pratinjau-pembagian"></p>
-        </div>
+        <p class="bantuan">Soal tanpa batas jumlah. Tiap soal: pertanyaan (dibacakan juri, tidak tampil di laptop) + 4 opsi + 1 kunci.</p>
         <div id="daftar-soal"></div>
         <button id="tombol-tambah-soal" type="button">+ Tambah Soal</button>
         <button id="tombol-mulai" type="button" class="primer">MULAI PERMAINAN</button>
@@ -54,58 +38,21 @@
       </div>
     </section>
 
-    <section id="mode-baca" class="mode">
+    <section id="mode-menjawab" class="mode">
       <div class="kartu">
-        <div id="baca-babak"></div>
-        <div id="baca-nomor"></div>
-        <div id="baca-soal"></div>
-        <div id="baca-giliran"></div>
-        <div id="pemilih-rebutan" style="display:none">
-          <p class="bantuan">Tim mana yang merebut duluan? (angkat tangan paling cepat)</p>
-          <div class="baris-tombol">
-            <button id="tombol-pilih-a" type="button">Tim A merebut</button>
-            <button id="tombol-pilih-b" type="button">Tim B merebut</button>
-          </div>
-        </div>
-        <p class="bantuan" id="baca-status">Menunggu peserta mulai mengetik…</p>
-        <button id="tombol-lempar" type="button">Lempar ke Tim Lawan</button>
+        <div id="jawab-nomor"></div>
+        <div id="jawab-soal"></div>
+        <div id="jawab-opsi"></div>
+        <div id="jawab-kunci"></div>
+        <div id="jawab-penjawab"></div>
+        <div id="jawab-sisa"></div>
+        <div id="jawab-status">Menunggu jawaban dikunci… (otomatis dinilai)</div>
+        <button id="tombol-hint" type="button">Hint: Buang 1 Opsi Salah</button>
       </div>
-    </section>
-
-    <section id="mode-live" class="mode">
-      <div class="kartu">
-        <div id="live-babak"></div>
-        <div id="live-soal"></div>
-        <div id="live-penjawab"></div>
-        <div id="live-tahap"></div>
-        <div id="live-sisa"></div>
-        <div id="kotak-live">(belum ada ketikan)</div>
-        <div class="baris-tombol">
-          <button id="tombol-benar-live" type="button" class="benar" disabled>BENAR</button>
-          <button id="tombol-salah-live" type="button" class="salah" disabled>SALAH</button>
-        </div>
-      </div>
-    </section>
-
-    <section id="mode-nilai" class="mode">
-      <div class="kartu">
-        <h2>Penilaian Juri</h2>
-        <div id="nilai-babak"></div>
-        <div id="kotak-final"></div>
-        <div class="baris-tombol">
-          <button id="tombol-benar" type="button" class="benar">BENAR</button>
-          <button id="tombol-salah" type="button" class="salah">SALAH</button>
-        </div>
-      </div>
-    </section>
-
-    <section id="mode-melempar" class="mode">
-      <div class="kartu"><div id="teks-melempar"></div></div>
     </section>
 
     <section id="mode-hasil" class="mode">
       <div class="kartu">
-        <div id="hasil-babak-admin"></div>
         <div id="teks-hasil-admin"></div>
         <div id="skor-hasil-admin"></div>
       </div>
@@ -124,6 +71,14 @@
   <div id="panel-kontrol" class="sembunyi">
     <button id="tombol-next" type="button">Next Soal</button>
     <button id="tombol-akhiri" type="button" class="bahaya">Akhiri Permainan</button>
+  </div>
+
+  <div id="modal-hint">
+    <div class="kartu">
+      <div id="modal-hint-teks">Pilih 1 opsi SALAH untuk dibuang (benar setelah hint hanya +5):</div>
+      <div id="modal-hint-tombol"></div>
+      <button id="modal-hint-batal" type="button">Batal</button>
+    </div>
   </div>
 
   <div id="modal-akhir">

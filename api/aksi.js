@@ -1,10 +1,10 @@
 // Zeta Kuis - POST /api/aksi (Vercel serverless).
 // Body: { aksi, ...data } dengan aksi salah satu dari:
-// setup | mulai | jawab | nilai | lempar | next | rebutan | akhiri | reset
+// setup | jawab | hint | next | akhiri | reset
 const { aksi } = require('../lib/kuis');
 const { PESAN_REDIS } = require('../lib/kv');
 
-const DAFTAR = ['setup', 'mulai', 'jawab', 'nilai', 'lempar', 'next', 'rebutan', 'akhiri', 'reset'];
+const DAFTAR = ['setup', 'jawab', 'hint', 'next', 'akhiri', 'reset'];
 
 function kepalaAntiCache(res) {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');

@@ -15,6 +15,7 @@
     <span id="brand-babak"></span>
   </header>
   <div id="koneksi"><span id="titik-koneksi" class="indikator"></span></div>
+  <div id="cahaya"></div>
   <div id="flash"></div>
 
   <div id="overlay-suara">KLIK DI MANA SAJA UNTUK MENGAKTIFKAN SUARA</div>
@@ -27,9 +28,13 @@
 
     <section id="tampilan-soal" class="tampilan">
       <div id="nomor-soal"></div>
-      <div id="lencana-babak"></div>
-      <div id="teks-soal"></div>
       <div id="giliran"></div>
+      <div id="daftar-opsi">
+        <button type="button" class="opsi" data-huruf="A"><span class="huruf">A</span><span class="teks"></span></button>
+        <button type="button" class="opsi" data-huruf="B"><span class="huruf">B</span><span class="teks"></span></button>
+        <button type="button" class="opsi" data-huruf="C"><span class="huruf">C</span><span class="teks"></span></button>
+        <button type="button" class="opsi" data-huruf="D"><span class="huruf">D</span><span class="teks"></span></button>
+      </div>
       <div class="papan-skor">
         <span class="tim" id="skor-nama-a"></span>
         <span class="angka" id="skor-angka-a"></span>
@@ -37,27 +42,22 @@
         <span class="angka" id="skor-angka-b"></span>
         <span class="tim" id="skor-nama-b"></span>
       </div>
-    </section>
-
-    <section id="tampilan-input" class="tampilan">
-      <div id="lencana-babak-input"></div>
-      <div id="banner-lempar">KESEMPATAN TIM LAWAN</div>
-      <div id="label-penjawab"></div>
-      <div id="soal-kecil-lempar"></div>
-      <input id="kotak-jawaban" type="text" autocomplete="off" spellcheck="false" autocapitalize="off" maxlength="100">
       <div id="pembungkus-timer">
         <div id="lintasan-bar"><div id="isi-bar"></div></div>
         <div id="angka-detik"></div>
       </div>
     </section>
 
-    <section id="tampilan-loading" class="tampilan">
-      <div class="pulse">Memeriksa Jawaban...</div>
+    <section id="tampilan-tegang" class="tampilan">
+      <div id="teks-tegang">???</div>
+      <div id="pilihan-terkunci"></div>
+      <div class="pulse">Menunggu hasil...</div>
     </section>
 
     <section id="tampilan-hasil" class="tampilan">
       <div id="teks-hasil"></div>
       <div id="detail-hasil"></div>
+      <div id="hasil-opsi"></div>
       <div class="papan-skor">
         <span class="tim" id="hasil-nama-a"></span>
         <span class="angka" id="hasil-angka-a"></span>

@@ -1,27 +1,20 @@
-// Zeta Kuis - Logika layar laptop (mode Vercel: REST + polling, tanpa Socket.IO).
-// Live-typing antar layar dibuang sesuai keputusan: jawaban terkirim saat ENTER.
-// Client hanya merender dan memanggil /api/aksi; state resmi di server (Redis).
-// Poll adaptif: cepat saat permainan aktif (agar animasi tak terlewat),
-// lambat saat idle (hemat kuota + hemat limit Redis).
+// Zeta Kuis - Logika layar laptop MCQ (Vercel: REST + polling).
+// Admin membacakan soal (tidak tampil di sini). Tim memilih A/B/C/D via klik
+// mouse atau keyboard, lalu animasi tegang 3 detik otomatis, lalu hasil.
+// Client hanya merender dan memanggil /api/aksi; koreksi otomatis di server.
+// Poll adaptif: cepat saat permainan aktif, lambat saat idle.
 const POLL_CEPAT_MS = 400;
 const POLL_LAMBAT_MS = 1500;
 
-function faseAktif() {
-  return fase === 'MENJAWAB' || fase === 'MENILAI' || fase === 'MELEMPAR';
-}
-
 let fase = 'IDLE';
-let tahap = 'UTAMA';
 let config = {
   DETIK_MENJAWAB: 10,
-  DETIK_LEMPAR: 15,
   POIN_BENAR: 10,
-  POIN_BENAR_LEMPAR: 5,
-  TAMPILKAN_SOAL_SAAT_LEMPAR: true,
+  POIN_BENAR_HINT: 5,
+  TEGANG_MS: 3000,
   MIN_SOAL: 1,
-  MAKS_SOAL: 10,
   MAKS_KARAKTER_SOAL: 300,
-  MAKS_KARAKTER_JAWABAN: 100,
+  MAKS_KARAKTER_OPSI: 120,
   MAKS_KARAKTER_NAMA_TIM: 20,
   DURASI_FLASH_MS: 800
 };
@@ -32,15 +25,17 @@ let skorA = 0;
 let skorB = 0;
 let nomorSoal = 0;
 let totalSoal = 0;
-let teksSoal = '';
+let opsi = null;             // {A,B,C,D} teks opsi soal aktif
+let opsiDibuang = [];
 let giliranTim = 'A';
 let namaGiliran = '';
-let babakAktif = 'POIN';
-let rebutanDipilih = null;
-let sudahKirim = false;
-let sayaMengetik = false; // true dari ketikan pertama sampai jawaban terkirim / fase pindah
+let pilihan = null;          // pilihan yang dikunci server
+let hasilTerakhir = null;
+let poinTerakhir = 0;
+let hintDipakai = false;
+let terkunciLokal = false;   // saya sudah mengunci (optimistis)
+let menegangkan = false;     // animasi tegang 3 detik sedang jalan
 let faseSebelum = 'IDLE';
-let rebutanTerakhir = '##';
 
 // Timer lokal berbasis requestAnimationFrame.
 let rafId = null;
@@ -50,23 +45,19 @@ let timerBerakhir = 0;
 const $ = (id) => document.getElementById(id);
 const titikKoneksi = $('titik-koneksi');
 const overlaySuara = $('overlay-suara');
-const inputEl = $('kotak-jawaban');
 const flashEl = $('flash');
+const cahayaEl = $('cahaya');
+const tombolOpsi = Array.from(document.querySelectorAll('#daftar-opsi .opsi'));
 
 AudioManager.init();
 
 function terapkanConfig(c) {
   if (!c) return;
   config = Object.assign(config, c);
-  inputEl.maxLength = config.MAKS_KARAKTER_JAWABAN;
-}
-
-function labelBabak() {
-  return babakAktif === 'POIN' ? 'BABAK POIN' : 'BABAK REBUTAN';
 }
 
 function tampilkan(idAktif) {
-  const daftar = ['tampilan-idle', 'tampilan-soal', 'tampilan-input', 'tampilan-loading', 'tampilan-hasil', 'tampilan-pemenang'];
+  const daftar = ['tampilan-idle', 'tampilan-soal', 'tampilan-tegang', 'tampilan-hasil', 'tampilan-pemenang'];
   for (const id of daftar) {
     $(id).classList.toggle('aktif', id === idAktif);
   }
@@ -74,36 +65,41 @@ function tampilkan(idAktif) {
 }
 
 function perbaruiBrand() {
-  $('brand-babak').textContent = fase === 'IDLE' ? '' : labelBabak();
+  $('brand-babak').textContent = (fase === 'IDLE' || fase === 'PEMENANG' || !totalSoal) ? '' : ('SOAL ' + nomorSoal + '/' + totalSoal);
 }
 
-// Aturan ditulis ulang agar gampang dibaca: 3 kartu pendek.
+// Cahaya putih mengikuti kursor (UX memilih opsi).
+document.addEventListener('mousemove', (e) => {
+  cahayaEl.style.transform = 'translate(' + e.clientX + 'px,' + e.clientY + 'px)';
+});
+
+// Aturan main: 3 kartu pendek.
 function renderPeraturan() {
   const wadah = $('kartu-aturan');
   wadah.textContent = '';
   const kartu = [
     {
-      judul: 'BABAK POIN',
+      judul: 'CARA MAIN',
       isi: [
-        'Giliran otomatis bergantian: Soal 1 Tim A, Soal 2 Tim B, dst.',
-        'Ketik huruf pertama → soal hilang, waktu ' + config.DETIK_MENJAWAB + ' detik jalan.',
-        'Boleh diskusi, 1 orang mengetik. ENTER kirim / habis waktu terkirim.'
+        'Juri membacakan soal. Layar hanya menampilkan opsi A–D.',
+        'Giliran bergantian: Soal 1 Tim A, Soal 2 Tim B, dst.',
+        'Klik opsi / tekan tombol A B C D dalam ' + config.DETIK_MENJAWAB + ' detik.'
       ]
     },
     {
-      judul: 'BABAK REBUTAN',
+      judul: 'NILAI',
       isi: [
-        'Juri menunjuk tim tercepat angkat tangan.',
-        'Tim terpilih mengetik, waktu ' + config.DETIK_MENJAWAB + ' detik jalan.',
-        'Boleh diskusi, 1 orang mengetik.'
+        'Benar +' + config.POIN_BENAR + ' poin. Salah / waktu habis = 0.',
+        'Benar setelah hint hanya +' + config.POIN_BENAR_HINT + ' poin.',
+        'Tidak ada lemparan. Skor tertinggi menang.'
       ]
     },
     {
-      judul: 'NILAI & ETIKA',
+      judul: 'HINT & ETIKA',
       isi: [
-        'Benar +' + config.POIN_BENAR + '. Benar lemparan +' + config.POIN_BENAR_LEMPAR + '. Salah 0.',
-        'Salah → dilempar ke lawan, waktu ' + config.DETIK_LEMPAR + ' detik.',
-        'Bukan giliran dilarang bersuara. Tanpa HP/buku. Juri mutlak.'
+        'Juri boleh membuang 1 opsi salah (1x per soal).',
+        'Bukan giliran dilarang bersuara. Tanpa HP/buku.',
+        'Keputusan juri mutlak.'
       ]
     }
   ];
@@ -133,17 +129,21 @@ function renderSkor(namaAel, angkaAel, namaBel, angkaBel) {
   $(namaBel).classList.toggle('giliran', giliranTim === 'B');
 }
 
+function renderOpsi() {
+  for (const btn of tombolOpsi) {
+    const huruf = btn.getAttribute('data-huruf');
+    btn.querySelector('.teks').textContent = opsi ? opsi[huruf] : '';
+    btn.classList.toggle('dibuang', opsiDibuang.indexOf(huruf) !== -1);
+    btn.classList.toggle('terpilih', pilihan === huruf);
+    btn.classList.remove('benar-opt', 'salah-opt');
+    btn.disabled = terkunciLokal || opsiDibuang.indexOf(huruf) !== -1;
+  }
+}
+
 function renderSoal() {
   $('nomor-soal').textContent = 'SOAL ' + nomorSoal + ' / ' + totalSoal;
-  $('lencana-babak').textContent = labelBabak();
-  const el = $('teks-soal');
-  el.textContent = teksSoal;
-  el.classList.toggle('panjang', teksSoal.length > 120);
-  if (babakAktif === 'REBUTAN' && !rebutanDipilih) {
-    $('giliran').textContent = 'MENUNGGU JURI MEMILIH TIM PEREBUT…';
-  } else {
-    $('giliran').textContent = 'GILIRAN: ' + namaGiliran;
-  }
+  $('giliran').textContent = 'GILIRAN: ' + namaGiliran;
+  renderOpsi();
   renderSkor('skor-nama-a', 'skor-angka-a', 'skor-nama-b', 'skor-angka-b');
 }
 
@@ -151,54 +151,26 @@ function hentikanTimer() {
   if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
 }
 
-function gambarBingkaiTimer(total, akhir) {
+function mulaiTimerLokalDariSisa(sisa, total) {
+  hentikanTimer();
+  timerTotal = total;
+  timerBerakhir = performance.now() + Math.max(0, sisa) * 1000;
   const isiBar = $('isi-bar');
   const angka = $('angka-detik');
   function bingkai() {
-    const sisaMs = Math.max(0, akhir - performance.now());
-    const sisa = sisaMs / 1000;
-    isiBar.style.width = ((sisa / total) * 100).toFixed(2) + '%';
-    angka.textContent = String(Math.ceil(sisa));
-    angka.classList.toggle('mendesak', sisa <= 3.05 && sisa > 0);
+    const sisaMs = Math.max(0, timerBerakhir - performance.now());
+    const s = sisaMs / 1000;
+    isiBar.style.width = ((s / timerTotal) * 100).toFixed(2) + '%';
+    angka.textContent = String(Math.ceil(s));
+    angka.classList.toggle('mendesak', s <= 3.05 && s > 0);
     if (sisaMs <= 0) {
       hentikanTimer();
-      kirimJawaban('TIMEOUT');
+      kunciJawaban(null); // waktu habis = salah otomatis
       return;
     }
     rafId = requestAnimationFrame(bingkai);
   }
   rafId = requestAnimationFrame(bingkai);
-}
-
-function mulaiTimerLokal(detik) {
-  hentikanTimer();
-  timerTotal = detik;
-  timerBerakhir = performance.now() + detik * 1000;
-  gambarBingkaiTimer(timerTotal, timerBerakhir);
-}
-
-function mulaiTimerLokalDariSisa(sisa, total) {
-  hentikanTimer();
-  timerTotal = total;
-  timerBerakhir = performance.now() + Math.max(0, sisa) * 1000;
-  gambarBingkaiTimer(timerTotal, timerBerakhir);
-}
-
-function masukModeInput() {
-  fase = 'MENJAWAB';
-  sudahKirim = false;
-  tampilkan('tampilan-input');
-  $('lencana-babak-input').textContent = labelBabak();
-  $('banner-lempar').classList.toggle('tampil', tahap === 'LEMPAR');
-  const soalKecil = $('soal-kecil-lempar');
-  if (tahap === 'LEMPAR' && config.TAMPILKAN_SOAL_SAAT_LEMPAR) {
-    soalKecil.textContent = teksSoal;
-    soalKecil.classList.add('tampil');
-  } else {
-    soalKecil.textContent = '';
-    soalKecil.classList.remove('tampil');
-  }
-  $('label-penjawab').textContent = namaGiliran;
 }
 
 async function panggilAksi(payload) {
@@ -217,18 +189,59 @@ async function panggilAksi(payload) {
   }
 }
 
-function kirimJawaban(alasan) {
-  if (sudahKirim) return;
-  if (alasan === 'ENTER' && inputEl.value === '') return;
-  sudahKirim = true;
-  sayaMengetik = false;
+// Kunci pilihan via klik / keyboard. null = waktu habis.
+function kunciJawaban(huruf) {
+  if (fase !== 'SOAL' || terkunciLokal || menegangkan) return;
+  if (huruf !== null) {
+    if (opsiDibuang.indexOf(huruf) !== -1) return;
+    terkunciLokal = true;
+    renderOpsi();
+  }
+  // Optimistis: langsung tegang + drumroll tanpa menunggu server.
+  menegangkan = true;
   hentikanTimer();
-  const text = inputEl.value;
   AudioManager.stopAll();
-  fase = 'MENILAI';
-  tampilkan('tampilan-loading');
+  tampilkan('tampilan-tegang');
+  $('pilihan-terkunci').textContent = huruf
+    ? namaGiliran + ' memilih ' + huruf
+    : 'Waktu habis — tidak ada jawaban';
   AudioManager.play('drumroll');
-  panggilAksi({ aksi: 'jawab', text: text, alasan: alasan });
+  jadwalUngkap(config.TEGANG_MS);
+  panggilAksi({ aksi: 'jawab', pilihan: huruf });
+}
+
+// Penjadwalan ungkap hasil: hanya sekali per soal.
+let ungkapTerjadwal = false;
+function jadwalUngkap(ms) {
+  if (ungkapTerjadwal) return;
+  ungkapTerjadwal = true;
+  setTimeout(() => {
+    ungkapTerjadwal = false;
+    ungkapHasil();
+  }, ms);
+}
+
+// Animasi tegang otomatis TEGANG_MS, lalu ungkap hasil dari snapshot terakhir.
+let snapTegang = null;
+
+function ungkapHasil() {
+  const s = snapTegang;
+  if (!s || !s.hasilTerakhir) {
+    if (fase === 'HASIL') jadwalUngkap(1000); // data belum datang: tunggu poll berikut
+    return;
+  }
+  menegangkan = false;
+  if (!s || s.fase !== 'HASIL') return; // poll berikutnya akan menangani
+  AudioManager.stopAll();
+  if (s.hasilTerakhir === 'BENAR') {
+    AudioManager.play('correct');
+    kedip('#22c55e');
+    tampilHasilBenar(s);
+  } else {
+    AudioManager.play('wrong');
+    kedip('#ef4444');
+    tampilHasilSalah(s);
+  }
 }
 
 function kedip(warna) {
@@ -245,22 +258,46 @@ function kedip(warna) {
   requestAnimationFrame(bingkai);
 }
 
-function tampilHasilBenar(namaTimPoin, poin) {
+function gambarHasilOpsi(s) {
+  const wadah = $('hasil-opsi');
+  wadah.textContent = '';
+  if (!s.opsi) return;
+  for (const huruf of ['A', 'B', 'C', 'D']) {
+    const div = document.createElement('div');
+    div.className = 'opsi mini';
+    if (huruf === s.kunciTampil) div.classList.add('benar-opt');
+    if (huruf === s.pilihan && s.pilihan !== s.kunciTampil) div.classList.add('salah-opt');
+    if (s.opsiDibuang.indexOf(huruf) !== -1) div.classList.add('dibuang');
+    const badge = document.createElement('span');
+    badge.className = 'huruf';
+    badge.textContent = huruf;
+    const teks = document.createElement('span');
+    teks.className = 'teks';
+    teks.textContent = s.opsi[huruf];
+    div.appendChild(badge);
+    div.appendChild(teks);
+    wadah.appendChild(div);
+  }
+}
+
+function tampilHasilBenar(s) {
   const el = $('teks-hasil');
   el.textContent = 'BENAR!';
   el.className = '';
   el.classList.add('benar');
-  $('detail-hasil').textContent = '+' + poin + ' poin untuk ' + namaTimPoin;
+  $('detail-hasil').textContent = '+' + s.poinTerakhir + ' poin untuk ' + (s.giliranTim === 'A' ? s.timA : s.timB);
+  gambarHasilOpsi(s);
   renderSkor('hasil-nama-a', 'hasil-angka-a', 'hasil-nama-b', 'hasil-angka-b');
   tampilkan('tampilan-hasil');
 }
 
-function tampilHasilSalah() {
+function tampilHasilSalah(s) {
   const el = $('teks-hasil');
-  el.textContent = 'SALAH!';
+  el.textContent = s.pilihan ? 'SALAH!' : 'WAKTU HABIS!';
   el.className = '';
   el.classList.add('salah');
   $('detail-hasil').textContent = 'Tidak ada poin untuk soal ini';
+  gambarHasilOpsi(s);
   renderSkor('hasil-nama-a', 'hasil-angka-a', 'hasil-nama-b', 'hasil-angka-b');
   tampilkan('tampilan-hasil');
 }
@@ -323,135 +360,7 @@ function jalankanWinner(pemenang, aTimA, aTimB, aSkorA, aSkorB) {
   }, 3300);
 }
 
-// Terapkan snapshot dari server; bunyikan transisi hanya saat fase berubah.
-function terapkanSnapshot(s) {
-  if (!s || typeof s.fase !== 'string') return;
-  terapkanConfig(s.config);
-  const lama = faseSebelum;
-  faseSebelum = s.fase;
-
-  fase = s.fase;
-  tahap = s.tahap;
-  timA = s.timA; timB = s.timB;
-  skorA = s.skorA; skorB = s.skorB;
-  nomorSoal = s.nomorSoal; totalSoal = s.totalSoal;
-  teksSoal = s.teksSoal;
-  giliranTim = s.giliranTim; namaGiliran = s.namaGiliran;
-  babakAktif = s.babakAktif || 'POIN';
-  rebutanDipilih = s.rebutanDipilih || null;
-  perbaruiBrand();
-
-  // Server tidak bisa kembali ke SOAL selama saya mengetik (next hanya dari HASIL).
-  // Jadi snapshot SOAL/MENJAWAB saat saya mengetik = data basi: jangan sentuh
-  // tampilan, timer, dan ketikan (ini dulu yang menghapus huruf pertama dan
-  // memaksa tekan dua kali + me-restart suara tick).
-  if (s.fase !== 'SOAL' && s.fase !== 'MENJAWAB') sayaMengetik = false;
-  if (sayaMengetik) {
-    prosesPeristiwa(s);
-    return;
-  }
-
-  if (s.fase === 'IDLE') {
-    sudahKirim = false;
-    hentikanTimer();
-    AudioManager.stopAll();
-    renderPeraturan();
-    tampilkan('tampilan-idle');
-    if (!AudioManager.aktif) overlaySuara.classList.remove('sembunyi');
-    else overlaySuara.classList.add('sembunyi');
-    return;
-  }
-  overlaySuara.classList.add('sembunyi');
-
-  if (s.fase === 'SOAL') {
-    if (lama !== 'SOAL' || rebutanTerakhir !== String(s.rebutanDipilih)) {
-      sudahKirim = false;
-      hentikanTimer();
-      inputEl.value = '';
-      renderSoal();
-      tampilkan('tampilan-soal');
-    } else {
-      renderSoal();
-    }
-    rebutanTerakhir = String(s.rebutanDipilih);
-    prosesPeristiwa(s);
-    return;
-  }
-
-  if (s.fase === 'MENJAWAB') {
-    // Saya yang sedang mengetik: jangan ganggu timer & ketikan lokal.
-    if (lama === 'MENJAWAB' && !sudahKirim) { prosesPeristiwa(s); return; }
-    sudahKirim = false;
-    inputEl.value = '';
-    if (tahap === 'LEMPAR') {
-      $('banner-lempar').classList.add('tampil');
-      const soalKecil = $('soal-kecil-lempar');
-      if (config.TAMPILKAN_SOAL_SAAT_LEMPAR) {
-        soalKecil.textContent = teksSoal;
-        soalKecil.classList.add('tampil');
-      }
-    } else {
-      $('banner-lempar').classList.remove('tampil');
-      $('soal-kecil-lempar').classList.remove('tampil');
-    }
-    $('label-penjawab').textContent = namaGiliran;
-    $('lencana-babak-input').textContent = labelBabak();
-    tampilkan('tampilan-input');
-    try { inputEl.focus(); } catch (e) {}
-    const total = tahap === 'LEMPAR' ? config.DETIK_LEMPAR : config.DETIK_MENJAWAB;
-    const sisa = typeof s.sisaDetik === 'number' ? s.sisaDetik : total;
-    mulaiTimerLokalDariSisa(sisa, total);
-    prosesPeristiwa(s);
-    return;
-  }
-
-  if (s.fase === 'MENILAI') {
-    sudahKirim = true;
-    hentikanTimer();
-    tampilkan('tampilan-loading');
-    prosesPeristiwa(s);
-    return;
-  }
-
-  if (s.fase === 'MELEMPAR') {
-    sudahKirim = true;
-    hentikanTimer();
-    tampilkan('tampilan-loading');
-    prosesPeristiwa(s);
-    return;
-  }
-
-  if (s.fase === 'HASIL') {
-    sudahKirim = true;
-    hentikanTimer();
-    if (s.hasilTerakhir === 'BENAR') {
-      tampilHasilBenar(s.giliranTim === 'A' ? timA : timB, s.poinTerakhir);
-    } else {
-      tampilHasilSalah();
-    }
-    prosesPeristiwa(s);
-    return;
-  }
-
-  if (s.fase === 'PEMENANG') {
-    sudahKirim = true;
-    const animasiJalan = prosesPeristiwa(s);
-    if (!animasiJalan) {
-      // Tanpa event SELESAI baru: tampilkan statis tanpa mengulang animasi & suara.
-      tampilkan('tampilan-pemenang');
-      $('pemenang-kicker').classList.add('muncul');
-      const namaEl = $('nama-pemenang');
-      if (!namaEl.classList.contains('menang')) {
-        namaEl.textContent = s.pemenang === 'A' ? timA : timB;
-        namaEl.classList.add('menang');
-      }
-      $('skor-akhir').textContent = timA + ' ' + skorA + ' — ' + skorB + ' ' + timB;
-    }
-  }
-}
-
-// Antrean kejadian dari server: tiap rev baru dimainkan sekali, tak peduli
-// poll sedang cepat atau lambat. Sinkronisasi awal tidak membunyikan masa lalu.
+// Antrean kejadian dari server: tiap rev baru dimainkan sekali.
 let revTerakhir = -1;
 
 function prosesPeristiwa(s) {
@@ -473,26 +382,20 @@ function mainkanPeristiwa(ev) {
     case 'SOAL_BARU':
       AudioManager.play('start');
       break;
-    case 'MULAI_MENJAWAB':
-    case 'MULAI_LEMPAR':
-      if (!sayaMengetik) AudioManager.play('tick'); // pengetik sudah menyalakannya lokal
+    case 'HINT':
+      AudioManager.play('start');
       break;
-    case 'JAWAB_TERKIRIM':
-      if (sudahKirim) break; // pengirim sudah drumroll optimistis; jangan mulai ulang
-      AudioManager.stopAll();
-      tampilkan('tampilan-loading');
-      AudioManager.play('drumroll');
+    case 'KUNCI_JAWABAN':
+      // Suspense + drumroll sudah dimulai optimistis oleh pengunci.
+      if (!terkunciLokal && !menegangkan) {
+        AudioManager.stopAll();
+        AudioManager.play('drumroll');
+      }
       break;
-    case 'BENAR':
-      AudioManager.stopAll();
-      AudioManager.play('correct');
-      kedip('#22c55e');
+    case 'BENAR_MCQ':
+      // Diungkap setelah animasi tegang (lihat ungkapHasil).
       break;
-    case 'SALAH_LEMPAR':
-    case 'SALAH_HASIL':
-      AudioManager.stopAll();
-      AudioManager.play('wrong');
-      kedip('#ef4444');
+    case 'SALAH_MCQ':
       break;
     case 'SELESAI':
       if (fase === 'PEMENANG') {
@@ -502,6 +405,122 @@ function mainkanPeristiwa(ev) {
       break;
   }
   return false;
+}
+
+// Terapkan snapshot dari server.
+function terapkanSnapshot(s) {
+  if (!s || typeof s.fase !== 'string') return;
+  terapkanConfig(s.config);
+  const lama = faseSebelum;
+  faseSebelum = s.fase;
+
+  fase = s.fase;
+  timA = s.timA; timB = s.timB;
+  skorA = s.skorA; skorB = s.skorB;
+  nomorSoal = s.nomorSoal; totalSoal = s.totalSoal;
+  opsi = s.opsi;
+  opsiDibuang = s.opsiDibuang || [];
+  giliranTim = s.giliranTim; namaGiliran = s.namaGiliran;
+  pilihan = s.pilihan;
+  hasilTerakhir = s.hasilTerakhir;
+  poinTerakhir = s.poinTerakhir;
+  hintDipakai = !!s.hintDipakai;
+  // Kunci untuk mengungkap hasil (hanya dipakai di tampilan hasil, tak dirender saat menjawab).
+  kunciTampil = s.kunci;
+  perbaruiBrand();
+
+  if (s.fase === 'IDLE') {
+    terkunciLokal = false;
+    menegangkan = false;
+    snapTegang = null;
+    hentikanTimer();
+    AudioManager.stopAll();
+    renderPeraturan();
+    tampilkan('tampilan-idle');
+    if (!AudioManager.aktif) overlaySuara.classList.remove('sembunyi');
+    else overlaySuara.classList.add('sembunyi');
+    prosesPeristiwa(s);
+    return;
+  }
+  overlaySuara.classList.add('sembunyi');
+
+  if (s.fase === 'SOAL') {
+    if (lama !== 'SOAL') {
+      terkunciLokal = false;
+      menegangkan = false;
+      snapTegang = null;
+      hentikanTimer();
+      renderSoal();
+      tampilkan('tampilan-soal');
+      const total = config.DETIK_MENJAWAB;
+      const sisa = typeof s.sisaDetik === 'number' ? s.sisaDetik : total;
+      mulaiTimerLokalDariSisa(sisa, total);
+      AudioManager.play('tick');
+    } else {
+      renderOpsi(); // hint baru / refresh: perbarui status opsi tanpa reset timer
+    }
+    prosesPeristiwa(s);
+    return;
+  }
+
+  if (s.fase === 'HASIL') {
+    hentikanTimer();
+    snapTegang = {
+      pilihan: s.pilihan,
+      giliranTim: s.giliranTim,
+      timA: s.timA, timB: s.timB,
+      hasilTerakhir: s.hasilTerakhir,
+      poinTerakhir: s.poinTerakhir,
+      opsi: s.opsi,
+      opsiDibuang: s.opsiDibuang || [],
+      kunciTampil: s.kunci
+    };
+    const sinkronBaru = (revTerakhir === -1);
+    prosesPeristiwa(s);
+    if (sinkronBaru) {
+      // Refresh di tengah HASIL: langsung ungkap tanpa tegang ulang.
+      menegangkan = false;
+      ungkapHasilLangsung(snapTegang);
+    } else if (!menegangkan) {
+      menegangkan = true;
+      tampilkan('tampilan-tegang');
+      $('pilihan-terkunci').textContent = s.pilihan
+        ? (s.giliranTim === 'A' ? s.timA : s.timB) + ' memilih ' + s.pilihan
+        : 'Waktu habis — tidak ada jawaban';
+      AudioManager.stopAll();
+      AudioManager.play('drumroll');
+      jadwalUngkap(config.TEGANG_MS);
+    }
+    return;
+  }
+
+  if (s.fase === 'PEMENANG') {
+    menegangkan = false;
+    const animasiJalan = prosesPeristiwa(s);
+    if (!animasiJalan) {
+      tampilkan('tampilan-pemenang');
+      $('pemenang-kicker').classList.add('muncul');
+      const namaEl = $('nama-pemenang');
+      if (!namaEl.classList.contains('menang')) {
+        namaEl.textContent = s.pemenang === 'A' ? timA : timB;
+        namaEl.classList.add('menang');
+      }
+      $('skor-akhir').textContent = timA + ' ' + skorA + ' — ' + skorB + ' ' + timB;
+    }
+  }
+}
+
+function ungkapHasilLangsung(s) {
+  AudioManager.stopAll();
+  if (s.hasilTerakhir === 'BENAR') {
+    AudioManager.play('correct');
+    kedip('#22c55e');
+    tampilHasilBenar(s);
+  } else {
+    AudioManager.play('wrong');
+    kedip('#ef4444');
+    tampilHasilSalah(s);
+  }
 }
 
 let pollJalan = false;
@@ -521,40 +540,21 @@ async function pollSekali() {
   }
 }
 
-// Interupsi keyboard: hanya saat SOAL + UTAMA. Rebutan menunggu pilihan juri.
+// Klik mouse pada opsi.
+for (const btn of tombolOpsi) {
+  btn.addEventListener('click', () => {
+    kunciJawaban(btn.getAttribute('data-huruf'));
+  });
+}
+
+// Keyboard A/B/C/D (huruf besar/kecil).
 document.addEventListener('keydown', (e) => {
-  if (fase !== 'SOAL' || tahap !== 'UTAMA') return;
-  if (babakAktif === 'REBUTAN' && !rebutanDipilih) return;
-  if (e.ctrlKey || e.metaKey || e.altKey) return;     // abaikan shortcut
-  if (e.key.length !== 1) return;                     // hanya karakter yang bisa dicetak (abaikan Shift, F5, Esc, Tab, dll)
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const h = String(e.key || '').toUpperCase();
+  if (h !== 'A' && h !== 'B' && h !== 'C' && h !== 'D') return;
+  if (fase !== 'SOAL' || terkunciLokal || menegangkan) return;
   e.preventDefault();
-  masukModeInput();                                   // tampilkan Input State
-  inputEl.value = e.key;                              // masukkan huruf pertama secara manual (agar tidak hilang)
-  inputEl.focus();
-  sayaMengetik = true;
-  mulaiTimerLokal(config.DETIK_MENJAWAB);             // timer lokal langsung jalan (tanpa menunggu server)
-  AudioManager.play('tick');                          // loop
-  panggilAksi({ aksi: 'mulai' });
-});
-
-inputEl.addEventListener('input', () => {
-  if (fase !== 'MENJAWAB' || sudahKirim) return;
-  sayaMengetik = true; // mengetik (mis. babak lemparan): kunci layar dari snapshot basi
-});
-
-inputEl.addEventListener('paste', (e) => e.preventDefault());
-inputEl.addEventListener('contextmenu', (e) => e.preventDefault());
-inputEl.addEventListener('blur', () => {
-  if (fase === 'MENJAWAB' && !sudahKirim) {
-    try { inputEl.focus(); } catch (e) {}
-  }
-});
-inputEl.addEventListener('keydown', (e) => {
-  if (e.key !== 'Enter') return;
-  if (fase !== 'MENJAWAB' || sudahKirim) return;
-  e.preventDefault();
-  if (inputEl.value === '') return; // ENTER kosong diabaikan
-  kirimJawaban('ENTER');
+  kunciJawaban(h);
 });
 
 // Aktivasi suara: klik pertama.
@@ -580,5 +580,5 @@ pollSekali();
   setTimeout(async () => {
     await pollSekali();
     jadwalPoll();
-  }, faseAktif() ? POLL_CEPAT_MS : POLL_LAMBAT_MS);
+  }, (fase === 'SOAL') ? POLL_CEPAT_MS : POLL_LAMBAT_MS);
 })();

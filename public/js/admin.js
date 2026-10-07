@@ -1,25 +1,18 @@
-// Zeta Kuis - Panel admin HP (mode Vercel: REST + polling, tanpa Socket.IO).
-// Live-typing antar layar dibuang sesuai keputusan: juri menilai jawaban final
-// yang dikirim peserta saat ENTER. Juri mengisi tim & soal, menilai, lanjut soal.
-// Poll adaptif: cepat saat permainan aktif, lambat saat idle/selesai.
+// Zeta Kuis - Panel admin HP versi MCQ (Vercel: REST + polling).
+// Juri: isi tim & soal (tanpa batas), bacakan soal, boleh 1x hint per soal
+// (memilih opsi salah yang dibuang), lanjut soal, akhiri permainan.
+// Penilaian OTOMATIS oleh server via kunci jawaban.
 const POLL_CEPAT_MS = 400;
 const POLL_LAMBAT_MS = 1500;
 
-function faseAktif() {
-  return fase === 'MENJAWAB' || fase === 'MENILAI' || fase === 'MELEMPAR';
-}
-
 let fase = 'IDLE';
-let tahap = 'UTAMA';
 let config = {
   DETIK_MENJAWAB: 10,
-  DETIK_LEMPAR: 15,
   POIN_BENAR: 10,
-  POIN_BENAR_LEMPAR: 5,
+  POIN_BENAR_HINT: 5,
   MIN_SOAL: 1,
-  MAKS_SOAL: 10,
   MAKS_KARAKTER_SOAL: 300,
-  MAKS_KARAKTER_JAWABAN: 100,
+  MAKS_KARAKTER_OPSI: 120,
   MAKS_KARAKTER_NAMA_TIM: 20
 };
 let timA = '';
@@ -28,16 +21,17 @@ let skorA = 0;
 let skorB = 0;
 let nomorSoal = 0;
 let totalSoal = 0;
-let teksSoal = '';
+let tanya = '';
+let opsi = null;
+let kunci = null;
+let opsiDibuang = [];
 let giliranTim = 'A';
 let namaGiliran = '';
-let babakAktif = 'POIN';
-let rebutanDipilih = null;
-let modeAktif = 'POIN';
+let pilihan = null;
 let hasilTerakhir = null;
 let poinTerakhir = 0;
+let hintDipakai = false;
 let pemenang = null;
-let dinilai = false; // cegah ketukan ganda BENAR/SALAH
 let faseSebelum = 'IDLE';
 
 // Timer kecil admin.
@@ -57,12 +51,8 @@ function toast(pesan) {
   toastTimeout = setTimeout(() => el.classList.remove('tampil'), 3000);
 }
 
-function labelBabak(kode) {
-  return kode === 'POIN' ? 'BABAK POIN' : 'BABAK REBUTAN';
-}
-
 function tampilMode(idAktif) {
-  const daftar = ['mode-setup', 'mode-baca', 'mode-live', 'mode-nilai', 'mode-melempar', 'mode-hasil', 'mode-selesai'];
+  const daftar = ['mode-setup', 'mode-menjawab', 'mode-hasil', 'mode-selesai'];
   for (const id of daftar) {
     $(id).classList.toggle('aktif', id === idAktif);
   }
@@ -71,7 +61,6 @@ function tampilMode(idAktif) {
 }
 
 function perbaruiHeader() {
-  $('info-babak').textContent = (fase === 'IDLE' || fase === 'PEMENANG') ? '' : labelBabak(babakAktif);
   if (totalSoal > 0 && fase !== 'IDLE' && fase !== 'PEMENANG') {
     $('info-soal').textContent = 'SOAL ' + nomorSoal + '/' + totalSoal;
   } else {
@@ -128,148 +117,150 @@ async function panggilAksi(payload) {
   }
 }
 
-// ---- Setup dinamis ----
-function modeDipilih() {
-  const cek = document.querySelector('input[name="mode"]:checked');
-  return cek ? cek.value : 'POIN';
-}
-
+// ---- Setup dinamis (tanpa batas jumlah soal) ----
 function jumlahSoal() {
-  return $('daftar-soal').querySelectorAll('textarea').length;
-}
-
-function soalTerisi() {
-  return bacaSoalDariForm().filter((s) => s.trim().length > 0).length;
-}
-
-function perbaruiPengaturanKedua() {
-  const mode = modeDipilih();
-  $('pengaturan-kedua').style.display = mode === 'KEDUA' ? '' : 'none';
-  if (mode !== 'KEDUA') return;
-  const total = Math.max(soalTerisi(), jumlahSoal());
-  const inputJumlah = $('input-jumlah-pertama');
-  inputJumlah.max = String(Math.max(1, total - 1));
-  inputJumlah.min = '1';
-  let pertama = parseInt(inputJumlah.value, 10);
-  if (!Number.isFinite(pertama) || pertama < 1) pertama = Math.ceil(total / 2);
-  if (pertama > total - 1) pertama = Math.max(1, total - 1);
-  const urutan = $('pilih-urutan').value;
-  const pertamaLabel = urutan === 'REBUTAN_DULU' ? 'REBUTAN' : 'POIN';
-  const keduaLabel = pertamaLabel === 'POIN' ? 'REBUTAN' : 'POIN';
-  $('pratinjau-pembagian').textContent = 'Soal 1–' + pertama + ': ' + pertamaLabel + '. Soal ' + (pertama + 1) + '–' + total + ': ' + keduaLabel + '. Skor tetap diakumulasi.';
-  perbaruiBantuanGiliran();
-}
-
-function perbaruiLabelSoal() {
-  const areas = $('daftar-soal').querySelectorAll('.blok-soal');
-  areas.forEach((blok, i) => {
-    blok.querySelector('label').textContent = 'Soal ' + (i + 1);
-  });
-  $('tombol-tambah-soal').disabled = jumlahSoal() >= config.MAKS_SOAL;
-}
-
-function tambahSoal(nilaiAwal) {
-  if (jumlahSoal() >= config.MAKS_SOAL) return;
-  const blok = document.createElement('div');
-  blok.className = 'blok-soal';
-  const label = document.createElement('label');
-  label.className = 'judul-kecil';
-  const area = document.createElement('textarea');
-  area.maxLength = config.MAKS_KARAKTER_SOAL;
-  area.placeholder = 'Tulis soal...';
-  if (nilaiAwal) area.value = nilaiAwal;
-  area.addEventListener('input', perbaruiPengaturanKedua);
-  blok.appendChild(label);
-  blok.appendChild(area);
-  if (jumlahSoal() >= 1) {
-    const hapus = document.createElement('button');
-    hapus.type = 'button';
-    hapus.className = 'kecil';
-    hapus.textContent = '− Hapus';
-    hapus.addEventListener('click', () => {
-      if (jumlahSoal() <= 1) return;
-      blok.remove();
-      perbaruiLabelSoal();
-      perbaruiPengaturanKedua();
-    });
-    blok.appendChild(hapus);
-  }
-  $('daftar-soal').appendChild(blok);
-  perbaruiLabelSoal();
-  perbaruiPengaturanKedua();
+  return $('daftar-soal').querySelectorAll('.blok-soal-mcq').length;
 }
 
 function bacaSoalDariForm() {
-  const areas = $('daftar-soal').querySelectorAll('textarea');
-  return Array.from(areas).map((a) => a.value);
+  const blokir = $('daftar-soal').querySelectorAll('.blok-soal-mcq');
+  return Array.from(blokir).map((blok) => {
+    const opsi = {};
+    for (const h of ['A', 'B', 'C', 'D']) {
+      opsi[h] = blok.querySelector('input[data-opsi="' + h + '"]').value;
+    }
+    const kunciCek = blok.querySelector('input[name^="kunci-"]:checked');
+    return {
+      tanya: blok.querySelector('textarea').value,
+      opsi: opsi,
+      kunci: kunciCek ? kunciCek.value : ''
+    };
+  });
+}
+
+function soalTerisi() {
+  return bacaSoalDariForm().filter((s) => s.tanya.trim().length > 0).length;
 }
 
 function perbaruiBantuanGiliran() {
   const a = $('input-tim-a').value.trim() || 'Tim 1';
   const b = $('input-tim-b').value.trim() || 'Tim 2';
-  const mode = modeDipilih();
-  if (mode === 'POIN') {
-    $('bantuan-giliran').textContent = 'Babak Poin: giliran otomatis bergantian. Soal 1 → ' + a + ', soal 2 → ' + b + ', dst.';
-  } else if (mode === 'REBUTAN') {
-    $('bantuan-giliran').textContent = 'Babak Rebutan: juri menunjuk tim tercepat angkat tangan untuk tiap soal.';
-  } else {
-    const urutan = $('pilih-urutan').value === 'REBUTAN_DULU' ? 'Rebutan dulu, lalu Poin' : 'Poin dulu, lalu Rebutan';
-    $('bantuan-giliran').textContent = 'Mode Keduanya (' + urutan + '). Skor diakumulasi. ' + $('pratinjau-pembagian').textContent;
-  }
+  $('bantuan-giliran').textContent = 'Giliran bergantian: soal 1 → ' + a + ', soal 2 → ' + b + ', dst. ' +
+    soalTerisi() + ' soal terisi. Benar +' + config.POIN_BENAR + ' (setelah hint +' + config.POIN_BENAR_HINT + ').';
 }
 
-$('tombol-tambah-soal').addEventListener('click', () => tambahSoal(''));
+function tambahSoal() {
+  const idx = jumlahSoal();
+  const blok = document.createElement('div');
+  blok.className = 'blok-soal-mcq kartu';
+  const judul = document.createElement('h3');
+  judul.className = 'judul-kecil';
+  judul.textContent = 'Soal ' + (idx + 1);
+  blok.appendChild(judul);
+  const labelTanya = document.createElement('label');
+  labelTanya.className = 'judul-kecil';
+  labelTanya.textContent = 'Pertanyaan (dibacakan, tidak tampil di laptop)';
+  blok.appendChild(labelTanya);
+  const area = document.createElement('textarea');
+  area.maxLength = config.MAKS_KARAKTER_SOAL;
+  area.placeholder = 'Tulis pertanyaan...';
+  area.addEventListener('input', perbaruiBantuanGiliran);
+  blok.appendChild(area);
+  for (const h of ['A', 'B', 'C', 'D']) {
+    const baris = document.createElement('div');
+    baris.className = 'baris-opsi';
+    const radio = document.createElement('input');
+    radio.type = 'radio';
+    radio.name = 'kunci-' + idx;
+    radio.value = h;
+    radio.title = 'Jadikan kunci jawaban';
+    const lab = document.createElement('label');
+    lab.className = 'huruf-opsi';
+    lab.textContent = h;
+    const inp = document.createElement('input');
+    inp.type = 'text';
+    inp.setAttribute('data-opsi', h);
+    inp.maxLength = config.MAKS_KARAKTER_OPSI;
+    inp.placeholder = 'Opsi ' + h;
+    inp.autocomplete = 'off';
+    inp.addEventListener('input', perbaruiBantuanGiliran);
+    baris.appendChild(radio);
+    baris.appendChild(lab);
+    baris.appendChild(inp);
+    blok.appendChild(baris);
+  }
+  const ket = document.createElement('p');
+  ket.className = 'bantuan';
+  ket.textContent = 'Centang radio = kunci jawaban.';
+  blok.appendChild(ket);
+  if (idx >= 1) {
+    const hapus = document.createElement('button');
+    hapus.type = 'button';
+    hapus.className = 'kecil';
+    hapus.textContent = '− Hapus soal ini';
+    hapus.addEventListener('click', () => {
+      blok.remove();
+      perbaruiNomorSoal();
+      perbaruiBantuanGiliran();
+    });
+    blok.appendChild(hapus);
+  }
+  $('daftar-soal').appendChild(blok);
+  perbaruiNomorSoal();
+}
+
+function perbaruiNomorSoal() {
+  $('daftar-soal').querySelectorAll('.blok-soal-mcq h3').forEach((h, i) => {
+    h.textContent = 'Soal ' + (i + 1);
+  });
+}
+
+$('tombol-tambah-soal').addEventListener('click', tambahSoal);
 $('input-tim-a').addEventListener('input', perbaruiBantuanGiliran);
 $('input-tim-b').addEventListener('input', perbaruiBantuanGiliran);
-document.querySelectorAll('input[name="mode"]').forEach((r) => r.addEventListener('change', () => { perbaruiPengaturanKedua(); perbaruiBantuanGiliran(); }));
-$('pilih-urutan').addEventListener('change', () => { perbaruiPengaturanKedua(); perbaruiBantuanGiliran(); });
-$('input-jumlah-pertama').addEventListener('input', () => { perbaruiPengaturanKedua(); perbaruiBantuanGiliran(); });
 
 $('tombol-mulai').addEventListener('click', () => {
   const a = $('input-tim-a').value.trim();
   const b = $('input-tim-b').value.trim();
-  const soal = bacaSoalDariForm();
-  const mode = modeDipilih();
   if (!a || !b) { toast('Nama kedua tim wajib diisi.'); return; }
-  const terisi = soal.filter((s) => s.trim().length > 0).length;
-  if (terisi < 1) { toast('Minimal 1 soal terisi.'); return; }
-  if (mode === 'KEDUA' && terisi < 2) { toast('Mode Keduanya butuh minimal 2 soal.'); return; }
-  const payload = { aksi: 'setup', timA: a, timB: b, soal: soal, mode: mode };
-  if (mode === 'KEDUA') {
-    payload.urutan = $('pilih-urutan').value;
-    payload.jumlahBabakPertama = parseInt($('input-jumlah-pertama').value, 10);
+  const daftar = bacaSoalDariForm().filter((s) => s.tanya.trim().length > 0);
+  if (daftar.length < 1) { toast('Minimal 1 soal terisi lengkap.'); return; }
+  for (let i = 0; i < daftar.length; i++) {
+    const s = daftar[i];
+    for (const h of ['A', 'B', 'C', 'D']) {
+      if (!s.opsi[h].trim()) { toast('Soal ' + (i + 1) + ': opsi ' + h + ' wajib diisi.'); return; }
+    }
+    if (['A', 'B', 'C', 'D'].indexOf(s.kunci) === -1) { toast('Soal ' + (i + 1) + ': pilih kunci jawaban.'); return; }
   }
-  panggilAksi(payload);
+  panggilAksi({ aksi: 'setup', timA: a, timB: b, soal: daftar });
 });
 
-$('tombol-lempar').addEventListener('click', () => {
-  if (tahap !== 'UTAMA') return;
-  if (babakAktif === 'REBUTAN' && !rebutanDipilih) { toast('Pilih tim perebut dulu.'); return; }
-  if (!confirm('Lempar soal ini ke tim lawan?')) return;
-  panggilAksi({ aksi: 'lempar' });
+$('tombol-hint').addEventListener('click', () => {
+  if (fase !== 'SOAL' || hintDipakai) return;
+  bukaModalHint();
 });
 
-$('tombol-pilih-a').addEventListener('click', () => {
-  panggilAksi({ aksi: 'rebutan', tim: 'A' });
-});
-$('tombol-pilih-b').addEventListener('click', () => {
-  panggilAksi({ aksi: 'rebutan', tim: 'B' });
+$('modal-hint-batal').addEventListener('click', () => {
+  $('modal-hint').classList.remove('tampil');
 });
 
-$('tombol-benar').addEventListener('click', () => {
-  if (dinilai) return;
-  dinilai = true;
-  $('tombol-benar').disabled = true;
-  $('tombol-salah').disabled = true;
-  panggilAksi({ aksi: 'nilai', hasil: 'BENAR' });
-});
-$('tombol-salah').addEventListener('click', () => {
-  if (dinilai) return;
-  dinilai = true;
-  $('tombol-benar').disabled = true;
-  $('tombol-salah').disabled = true;
-  panggilAksi({ aksi: 'nilai', hasil: 'SALAH' });
-});
+function bukaModalHint() {
+  const wadah = $('modal-hint-tombol');
+  wadah.textContent = '';
+  for (const h of ['A', 'B', 'C', 'D']) {
+    if (h === kunci) continue; // kunci tak boleh dibuang
+    if (opsiDibuang.indexOf(h) !== -1) continue;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = 'Buang ' + h + ': ' + ((opsi && opsi[h]) || '');
+    btn.addEventListener('click', () => {
+      $('modal-hint').classList.remove('tampil');
+      panggilAksi({ aksi: 'hint', buang: h });
+    });
+    wadah.appendChild(btn);
+  }
+  $('modal-hint').classList.add('tampil');
+}
 
 $('tombol-next').addEventListener('click', () => {
   panggilAksi({ aksi: 'next' });
@@ -327,17 +318,35 @@ function bukaModalAkhir() {
   modal.classList.add('tampil');
 }
 
+function gambarOpsiAdmin(elId, kunciId) {
+  const wadah = $(elId);
+  wadah.textContent = '';
+  if (!opsi) return;
+  for (const h of ['A', 'B', 'C', 'D']) {
+    const div = document.createElement('div');
+    div.className = 'opsi-admin';
+    if (h === kunci) div.classList.add('kunci');
+    if (opsiDibuang.indexOf(h) !== -1) div.classList.add('dibuang');
+    if (h === pilihan) div.classList.add('dipilih');
+    div.textContent = h + '. ' + opsi[h] + (h === kunci ? ' ✓' : '');
+    wadah.appendChild(div);
+  }
+  if (kunciId) $(kunciId).textContent = 'Kunci: ' + (kunci || '-');
+}
+
 function renderDariSnapshot(s, kosongkanForm) {
-  fase = s.fase; tahap = s.tahap;
+  fase = s.fase;
   timA = s.timA; timB = s.timB;
   skorA = s.skorA; skorB = s.skorB;
   nomorSoal = s.nomorSoal; totalSoal = s.totalSoal;
-  teksSoal = s.teksSoal;
+  tanya = s.tanya || '';
+  opsi = s.opsi;
+  kunci = s.kunci;
+  opsiDibuang = s.opsiDibuang || [];
   giliranTim = s.giliranTim; namaGiliran = s.namaGiliran;
-  babakAktif = s.babakAktif || 'POIN';
-  rebutanDipilih = s.rebutanDipilih || null;
-  modeAktif = s.mode || 'POIN';
+  pilihan = s.pilihan;
   hasilTerakhir = s.hasilTerakhir; poinTerakhir = s.poinTerakhir;
+  hintDipakai = !!s.hintDipakai;
   pemenang = s.pemenang;
   hentikanHitungMundur();
   perbaruiHeader();
@@ -346,48 +355,26 @@ function renderDariSnapshot(s, kosongkanForm) {
       $('input-tim-a').value = '';
       $('input-tim-b').value = '';
       $('daftar-soal').textContent = '';
-      tambahSoal('');
+      tambahSoal();
       perbaruiBantuanGiliran();
-      perbaruiPengaturanKedua();
     }
     tampilMode('mode-setup');
-    perbaruiLabelSoal();
   } else if (fase === 'SOAL') {
-    dinilai = false;
-    renderModeBaca();
-    tampilMode('mode-baca');
-    perbaruiTombolNext();
-  } else if (fase === 'MENJAWAB') {
-    dinilai = false;
-    $('live-babak').textContent = labelBabak(babakAktif);
-    $('live-soal').textContent = teksSoal;
-    $('live-penjawab').textContent = 'Sedang menjawab: ' + namaGiliran;
-    $('live-tahap').textContent = tahap === 'LEMPAR' ? 'Lemparan' : 'Kesempatan utama';
-    $('kotak-live').textContent = '(menunggu jawaban dikirim…)';
-    tampilMode('mode-live');
-    if (typeof s.sisaDetik === 'number') mulaiHitungMundur(s.sisaDetik, 'live-sisa');
-    perbaruiTombolNext();
-  } else if (fase === 'MENILAI') {
-    dinilai = false;
-    $('nilai-babak').textContent = labelBabak(babakAktif);
-    $('kotak-final').textContent = s.jawabanFinal || '(tidak ada jawaban)';
-    $('tombol-benar').disabled = false;
-    $('tombol-salah').disabled = false;
-    tampilMode('mode-nilai');
-    perbaruiTombolNext();
-  } else if (fase === 'MELEMPAR') {
-    const namaLawan = giliranTim === 'A' ? timA : timB;
-    $('teks-melempar').textContent = 'Soal dilempar ke ' + (namaLawan || '') + '…';
-    tampilMode('mode-melempar');
+    $('jawab-nomor').textContent = 'Soal ' + nomorSoal + ' / ' + totalSoal;
+    $('jawab-soal').textContent = tanya;
+    gambarOpsiAdmin('jawab-opsi', 'jawab-kunci');
+    $('jawab-penjawab').textContent = 'Menjawab: ' + namaGiliran;
+    $('tombol-hint').disabled = hintDipakai;
+    $('tombol-hint').textContent = hintDipakai ? 'Hint sudah dipakai (opsi ' + opsiDibuang.join(',') + ' dibuang)' : 'Hint: Buang 1 Opsi Salah';
+    if (typeof s.sisaDetik === 'number') mulaiHitungMundur(s.sisaDetik, 'jawab-sisa');
+    tampilMode('mode-menjawab');
     perbaruiTombolNext();
   } else if (fase === 'HASIL') {
-    $('hasil-babak-admin').textContent = labelBabak(babakAktif);
     if (hasilTerakhir === 'BENAR') {
-      const nama = giliranTim === 'A' ? timA : timB;
-      $('teks-hasil-admin').textContent = 'BENAR — +' + poinTerakhir + ' untuk ' + nama;
+      $('teks-hasil-admin').textContent = 'BENAR — +' + poinTerakhir + ' untuk ' + (giliranTim === 'A' ? timA : timB);
       $('teks-hasil-admin').className = 'hasil-benar';
     } else {
-      $('teks-hasil-admin').textContent = 'SALAH — tidak ada poin';
+      $('teks-hasil-admin').textContent = pilihan ? 'SALAH — tidak ada poin' : 'WAKTU HABIS — tidak ada poin';
       $('teks-hasil-admin').className = 'hasil-salah';
     }
     $('skor-hasil-admin').textContent = timA + ' ' + skorA + ' — ' + skorB + ' ' + timB;
@@ -399,24 +386,6 @@ function renderDariSnapshot(s, kosongkanForm) {
     $('skor-selesai-admin').textContent = timA + ' ' + skorA + ' — ' + skorB + ' ' + timB;
     tampilMode('mode-selesai');
   }
-}
-
-function renderModeBaca() {
-  $('baca-babak').textContent = labelBabak(babakAktif);
-  $('baca-nomor').textContent = 'Soal ' + nomorSoal + ' / ' + totalSoal;
-  $('baca-soal').textContent = teksSoal;
-  const butuhPilih = babakAktif === 'REBUTAN' && !rebutanDipilih;
-  $('pemilih-rebutan').style.display = butuhPilih ? '' : 'none';
-  if (butuhPilih) {
-    $('tombol-pilih-a').textContent = (timA || 'Tim A') + ' merebut';
-    $('tombol-pilih-b').textContent = (timB || 'Tim B') + ' merebut';
-    $('baca-giliran').textContent = 'Belum ada tim terpilih.';
-    $('baca-status').textContent = 'Pilih tim tercepat angkat tangan, lalu peserta mulai mengetik.';
-  } else {
-    $('baca-giliran').textContent = 'GILIRAN: ' + namaGiliran;
-    $('baca-status').textContent = 'Menunggu peserta mulai mengetik…';
-  }
-  $('tombol-lempar').style.display = tahap === 'UTAMA' && !butuhPilih ? '' : 'none';
 }
 
 function perbaruiTombolNext() {
@@ -457,10 +426,13 @@ async function pollSekali() {
   }
 }
 
+function faseAktif() {
+  return fase === 'SOAL';
+}
+
 // Inisialisasi form.
-tambahSoal('');
+tambahSoal();
 perbaruiBantuanGiliran();
-perbaruiPengaturanKedua();
 perbaruiHeader();
 perbaruiTombolNext();
 pollSekali();

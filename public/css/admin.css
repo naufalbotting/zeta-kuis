@@ -125,3 +125,47 @@ button.kecil { min-height: 48px; font-size: 0.95rem; width: auto; }
 .hasil-salah { color: var(--merah); font-weight: 700; }
 section.mode { display: none; }
 section.mode.aktif { display: block; }
+
+/* Blok soal MCQ di setup (tanpa batas jumlah) */
+.blok-soal-mcq h3 { margin: 4px 0 0; }
+.baris-opsi { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.baris-opsi input[type="radio"] { width: 26px; height: 26px; flex: 0 0 auto; }
+.baris-opsi .huruf-opsi { flex: 0 0 auto; font-weight: 700; width: 22px; }
+.baris-opsi input[type="text"] { flex: 1 1 auto; }
+
+/* Daftar opsi + kunci di layar juri */
+#baca-soal, #jawab-soal {
+  font-size: 1.25rem;
+  font-weight: 700;
+  white-space: pre-line;
+  margin: 8px 0;
+}
+#baca-nomor, #jawab-nomor, #baca-giliran, #jawab-penjawab { color: var(--abu-terang); margin-top: 8px; }
+#baca-kunci, #jawab-kunci { color: var(--hijau); font-weight: 700; margin-top: 8px; }
+#baca-opsi, #jawab-opsi { margin-top: 8px; }
+.opsi-admin {
+  background: #000;
+  border: 1px solid var(--abu-gelap);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-top: 8px;
+  font-size: 1.05rem;
+  white-space: pre-line;
+}
+.opsi-admin.kunci { border-color: var(--hijau); }
+.opsi-admin.dibuang { opacity: 0.4; text-decoration: line-through; }
+.opsi-admin.dipilih { border-color: var(--putih); }
+
+/* Modal hint: pilih opsi salah yang dibuang */
+#modal-hint {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 30;
+  padding: 20px;
+}
+#modal-hint.tampil { display: flex; }
+#modal-hint .kartu { width: 100%; max-width: 420px; }

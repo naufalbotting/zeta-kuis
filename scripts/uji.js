@@ -1,4 +1,4 @@
-// Zeta Kuis - Uji alur permainan penuh via HTTP (butuh scripts/dev.js jalan).
+// Zeta Kuis MCQ - Uji alur permainan penuh via HTTP (butuh scripts/dev.js jalan).
 // Jalankan: npm run dev  (terminal 1)  lalu  npm run uji  (terminal 2)
 const DASAR = 'http://localhost:' + (process.env.PORT || 3000);
 
@@ -27,82 +27,91 @@ async function state() {
   return await r.json();
 }
 
+function buatSoal(n, kunciKe) {
+  const daftar = [];
+  const hurufs = ['A', 'B', 'C', 'D'];
+  for (let i = 0; i < n; i++) {
+    daftar.push({
+      tanya: 'Pertanyaan ' + (i + 1),
+      opsi: { A: 'Opsi A-' + i, B: 'Opsi B-' + i, C: 'Opsi C-' + i, D: 'Opsi D-' + i },
+      kunci: hurufs[(i + kunciKe) % 4],
+    });
+  }
+  return daftar;
+}
+
 (async () => {
   let s = await state();
   cek('awal IDLE', s.fase === 'IDLE', s.fase);
 
-  let h = await aksi({ aksi: 'setup', timA: 'Sama', timB: 'sama', soal: ['Q'] });
+  let h = await aksi({ aksi: 'setup', timA: 'Sama', timB: 'sama', soal: buatSoal(1, 0) });
   cek('nama kembar ditolak', h.status === 400 && h.badan.pesan, h.badan);
 
-  h = await aksi({ aksi: 'setup', timA: 'Garuda', timB: 'Elang', soal: ['S1', 'S2', 'S3'], mode: 'KEDUA', urutan: 'POIN_DULU', jumlahBabakPertama: 2 });
-  cek('setup KEDUA -> SOAL', h.badan.ok && h.badan.snap.fase === 'SOAL' && h.badan.snap.giliranTim === 'A', h.badan);
-  cek('setup catat SOAL_BARU', h.badan.snap.rev >= 1 && h.badan.snap.antrean.some((e) => e.jenis === 'SOAL_BARU'), h.badan.snap);
+  h = await aksi({ aksi: 'setup', timA: 'Garuda', timB: 'Elang', soal: [{ tanya: 'Q', opsi: { A: 'a', B: '', C: 'c', D: 'd' }, kunci: 'A' }] });
+  cek('opsi kosong ditolak', h.status === 400, h.badan);
 
-  h = await aksi({ aksi: 'mulai' });
-  cek('mulai -> MENJAWAB', h.badan.snap.fase === 'MENJAWAB' && typeof h.badan.snap.sisaDetik === 'number', h.badan.snap);
+  h = await aksi({ aksi: 'setup', timA: 'Garuda', timB: 'Elang', soal: [{ tanya: 'Q', opsi: { A: 'a', B: 'b', C: 'c', D: 'd' }, kunci: 'E' }] });
+  cek('kunci invalid ditolak', h.status === 400, h.badan);
 
-  h = await aksi({ aksi: 'jawab', text: 'Jawaban A' });
-  cek('jawab -> MENILAI', h.badan.snap.fase === 'MENILAI' && h.badan.snap.jawabanFinal === 'Jawaban A', h.badan.snap);
+  // 12 soal: tanpa batas jumlah (dulu maks 10).
+  h = await aksi({ aksi: 'setup', timA: 'Garuda', timB: 'Elang', soal: buatSoal(12, 0) });
+  cek('setup 12 soal -> SOAL giliran A', h.badan.ok && h.badan.snap.fase === 'SOAL' && h.badan.snap.totalSoal === 12 && h.badan.snap.giliranTim === 'A', h.badan);
+  cek('snapshot bawa opsi+tanya+kunci', h.badan.snap.opsi && h.badan.snap.opsi.A === 'Opsi A-0' && h.badan.snap.tanya === 'Pertanyaan 1' && h.badan.snap.kunci === 'A', h.badan.snap);
+  cek('setup catat SOAL_BARU', h.badan.snap.antrean.some((e) => e.jenis === 'SOAL_BARU'), h.badan.snap.antrean);
 
-  h = await aksi({ aksi: 'nilai', hasil: 'BENAR' });
-  cek('benar utama +10', h.badan.snap.fase === 'HASIL' && h.badan.snap.skorA === 10, h.badan.snap);
-  cek('benar catat BENAR', h.badan.snap.antrean.some((e) => e.jenis === 'BENAR' && e.poin === 10), h.badan.snap.antrean);
+  // Soal 1 kunci A. Jawab B (salah).
+  h = await aksi({ aksi: 'jawab', pilihan: 'B' });
+  cek('salah -> HASIL 0 poin', h.badan.snap.fase === 'HASIL' && h.badan.snap.hasilTerakhir === 'SALAH' && h.badan.snap.skorA === 0, h.badan.snap);
+  cek('catat KUNCI + SALAH_MCQ', h.badan.snap.antrean.some((e) => e.jenis === 'KUNCI_JAWABAN') && h.badan.snap.antrean.some((e) => e.jenis === 'SALAH_MCQ'), h.badan.snap.antrean);
 
   h = await aksi({ aksi: 'next' });
   cek('next soal 2 giliran B', h.badan.snap.fase === 'SOAL' && h.badan.snap.nomorSoal === 2 && h.badan.snap.giliranTim === 'B', h.badan.snap);
 
-  await aksi({ aksi: 'mulai' });
-  await aksi({ aksi: 'jawab', text: 'Salah' });
-  const t0 = Date.now();
-  h = await aksi({ aksi: 'nilai', hasil: 'SALAH' });
-  const jeda = Date.now() - t0;
-  cek('salah utama -> LEMPAR (jeda Server ~1,5 dtk)', h.badan.snap.fase === 'MENJAWAB' && h.badan.snap.tahap === 'LEMPAR' && h.badan.snap.giliranTim === 'A' && jeda >= 1400, { snap: h.badan.snap, jedaMs: jeda });
-  cek('lempar catat SALAH_LEMPAR + MULAI_LEMPAR', h.badan.snap.antrean.some((e) => e.jenis === 'SALAH_LEMPAR') && h.badan.snap.antrean.some((e) => e.jenis === 'MULAI_LEMPAR'), h.badan.snap.antrean);
-
-  await aksi({ aksi: 'jawab', text: 'Benar lemparan' });
-  h = await aksi({ aksi: 'nilai', hasil: 'BENAR' });
-  cek('benar lemparan +5 untuk A', h.badan.snap.skorA === 15 && h.badan.snap.fase === 'HASIL', h.badan.snap);
+  // Soal 2 kunci B. Hint kunci ditolak dulu, lalu hint C valid, lalu hint kedua ditolak.
+  h = await aksi({ aksi: 'hint', buang: 'B' });
+  cek('hint kunci ditolak', h.status === 400, h.badan);
+  h = await aksi({ aksi: 'hint', buang: 'C' });
+  cek('hint C ok', h.badan.ok && h.badan.snap.opsiDibuang.join() === 'C' && h.badan.snap.hintDipakai, h.badan.snap);
+  h = await aksi({ aksi: 'hint', buang: 'D' });
+  cek('hint kedua ditolak', h.status === 400, h.badan);
+  h = await aksi({ aksi: 'jawab', pilihan: 'C' });
+  cek('jawab opsi dibuang ditolak', h.status === 400, h.badan);
+  h = await aksi({ aksi: 'jawab', pilihan: 'B' });
+  cek('benar setelah hint +5 untuk B', h.badan.snap.fase === 'HASIL' && h.badan.snap.skorB === 5 && h.badan.snap.poinTerakhir === 5, h.badan.snap);
 
   h = await aksi({ aksi: 'next' });
-  cek('soal 3 babak REBUTAN, belum dipilih', h.badan.snap.babakAktif === 'REBUTAN' && h.badan.snap.rebutanDipilih === null, h.badan.snap);
+  cek('next soal 3 giliran A', h.badan.snap.nomorSoal === 3 && h.badan.snap.giliranTim === 'A', h.badan.snap);
 
-  h = await aksi({ aksi: 'mulai' });
-  cek('mulai rebutan tanpa pilih ditolak', h.status === 400, h.badan);
+  // Soal 3 kunci C. Jawab benar tanpa hint -> +10.
+  h = await aksi({ aksi: 'jawab', pilihan: 'C' });
+  cek('benar tanpa hint +10', h.badan.snap.skorA === 10 && h.badan.snap.poinTerakhir === 10, h.badan.snap);
 
-  h = await aksi({ aksi: 'rebutan', tim: 'B' });
-  cek('rebutan pilih B', h.badan.ok && h.badan.snap.giliranTim === 'B', h.badan);
-
-  await aksi({ aksi: 'mulai' });
-  await aksi({ aksi: 'jawab', text: 'Ok' });
-  h = await aksi({ aksi: 'nilai', hasil: 'BENAR' });
-  cek('rebutan benar +10 untuk B', h.badan.snap.skorB === 10, h.badan.snap);
-
-  h = await aksi({ aksi: 'akhiri', pemenang: 'B' });
-  cek('akhiri -> PEMENANG B', h.badan.snap.fase === 'PEMENANG' && h.badan.snap.pemenang === 'B', h.badan.snap);
+  h = await aksi({ aksi: 'akhiri', pemenang: 'A' });
+  cek('akhiri -> PEMENANG A', h.badan.snap.fase === 'PEMENANG' && h.badan.snap.pemenang === 'A', h.badan.snap);
+  cek('catat SELESAI', h.badan.snap.antrean.some((e) => e.jenis === 'SELESAI'), h.badan.snap.antrean);
 
   h = await aksi({ aksi: 'reset' });
   cek('reset -> IDLE', h.badan.snap.fase === 'IDLE' && h.badan.snap.skorA === 0, h.badan.snap);
 
-  // THROW_NOW: tim tidak menjawab.
-  await aksi({ aksi: 'setup', timA: 'Garuda', timB: 'Elang', soal: ['Q1'] });
-  h = await aksi({ aksi: 'lempar' });
-  cek('lempar langsung -> MENJAWAB LEMPAR tim B', h.badan.snap.fase === 'MENJAWAB' && h.badan.snap.tahap === 'LEMPAR' && h.badan.snap.giliranTim === 'B', h.badan.snap);
+  // Timeout: jawab null = waktu habis.
+  await aksi({ aksi: 'setup', timA: 'Garuda', timB: 'Elang', soal: buatSoal(1, 2) });
+  h = await aksi({ aksi: 'jawab', pilihan: null });
+  cek('timeout -> HASIL SALAH', h.badan.snap.fase === 'HASIL' && h.badan.snap.hasilTerakhir === 'SALAH' && h.badan.snap.pilihan === null, h.badan.snap);
+  await aksi({ aksi: 'akhiri', pemenang: 'B' });
+  await aksi({ aksi: 'reset' });
 
-  // Pengaman hangus: timer kedaluwarsa tanpa kiriman -> MENILAI.
-  // (Uji unit in-process: memori KV dev-server dan penguji terpisah,
-  // jadi logika kadaluarsa diuji langsung via lib, bukan via HTTP.)
+  // Pengaman hangus via lib (memori KV dev-server dan penguji terpisah).
   const lib = require('../lib/kuis');
   const kvm = require('../lib/kv');
-  await kvm.tulis(lib.KUNCI, { fase: 'MENJAWAB', timerBerakhirPada: Date.now() - 60000, jawabanLive: 'abc' });
+  await kvm.tulis(lib.KUNCI, {
+    fase: 'SOAL',
+    soalAktif: 0,
+    daftarSoal: [{ tanya: 'Q', opsi: { A: 'a', B: 'b', C: 'c', D: 'd' }, kunci: 'A' }],
+    giliranTim: 'A',
+    timerBerakhirPada: Date.now() - 60000,
+  });
   const hangus = await lib.muatState();
-  cek('hangus otomatis -> MENILAI + jawaban ikut', hangus.fase === 'MENILAI' && hangus.jawabanFinal === 'abc', { fase: hangus.fase, final: hangus.jawabanFinal });
-
-  await aksi({ aksi: 'nilai', hasil: 'SALAH' });
-  h = await aksi({ aksi: 'akhiri', pemenang: 'A' });
-  cek('akhiri dari HASIL', h.badan.snap.fase === 'PEMENANG', h.badan.snap);
-  await aksi({ aksi: 'reset' });
-  s = await state();
-  cek('bersih akhir IDLE', s.fase === 'IDLE', s.fase);
+  cek('hangus otomatis -> HASIL SALAH', hangus.fase === 'HASIL' && hangus.hasilTerakhir === 'SALAH', { fase: hangus.fase });
 
   // Halaman statis.
   const r1 = await fetch(DASAR + '/');
