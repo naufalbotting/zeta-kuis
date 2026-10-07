@@ -38,6 +38,7 @@ let namaGiliran = '';
 let babakAktif = 'POIN';
 let rebutanDipilih = null;
 let sudahKirim = false;
+let sayaMengetik = false; // true dari ketikan pertama sampai jawaban terkirim / fase pindah
 let faseSebelum = 'IDLE';
 let rebutanTerakhir = '##';
 
@@ -220,6 +221,7 @@ function kirimJawaban(alasan) {
   if (sudahKirim) return;
   if (alasan === 'ENTER' && inputEl.value === '') return;
   sudahKirim = true;
+  sayaMengetik = false;
   hentikanTimer();
   const text = inputEl.value;
   AudioManager.stopAll();
@@ -338,6 +340,16 @@ function terapkanSnapshot(s) {
   babakAktif = s.babakAktif || 'POIN';
   rebutanDipilih = s.rebutanDipilih || null;
   perbaruiBrand();
+
+  // Server tidak bisa kembali ke SOAL selama saya mengetik (next hanya dari HASIL).
+  // Jadi snapshot SOAL/MENJAWAB saat saya mengetik = data basi: jangan sentuh
+  // tampilan, timer, dan ketikan (ini dulu yang menghapus huruf pertama dan
+  // memaksa tekan dua kali + me-restart suara tick).
+  if (s.fase !== 'SOAL' && s.fase !== 'MENJAWAB') sayaMengetik = false;
+  if (sayaMengetik) {
+    prosesPeristiwa(s);
+    return;
+  }
 
   if (s.fase === 'IDLE') {
     sudahKirim = false;
@@ -463,9 +475,10 @@ function mainkanPeristiwa(ev) {
       break;
     case 'MULAI_MENJAWAB':
     case 'MULAI_LEMPAR':
-      AudioManager.play('tick');
+      if (!sayaMengetik) AudioManager.play('tick'); // pengetik sudah menyalakannya lokal
       break;
     case 'JAWAB_TERKIRIM':
+      if (sudahKirim) break; // pengirim sudah drumroll optimistis; jangan mulai ulang
       AudioManager.stopAll();
       tampilkan('tampilan-loading');
       AudioManager.play('drumroll');
@@ -518,9 +531,15 @@ document.addEventListener('keydown', (e) => {
   masukModeInput();                                   // tampilkan Input State
   inputEl.value = e.key;                              // masukkan huruf pertama secara manual (agar tidak hilang)
   inputEl.focus();
+  sayaMengetik = true;
   mulaiTimerLokal(config.DETIK_MENJAWAB);             // timer lokal langsung jalan (tanpa menunggu server)
   AudioManager.play('tick');                          // loop
   panggilAksi({ aksi: 'mulai' });
+});
+
+inputEl.addEventListener('input', () => {
+  if (fase !== 'MENJAWAB' || sudahKirim) return;
+  sayaMengetik = true; // mengetik (mis. babak lemparan): kunci layar dari snapshot basi
 });
 
 inputEl.addEventListener('paste', (e) => e.preventDefault());
